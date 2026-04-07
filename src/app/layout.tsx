@@ -2,13 +2,13 @@ import type { Metadata, Viewport } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'FichaApp – Control de presencia',
+  title: 'BUILT – Control de presencia',
   description: 'Sistema de fichaje por geolocalización para empresas de construcción',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
-    statusBarStyle: 'default',
-    title: 'FichaApp',
+    statusBarStyle: 'black-translucent',
+    title: 'BUILT',
   },
 }
 
@@ -17,7 +17,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  themeColor: '#f97316',
+  themeColor: '#09090b',
 }
 
 export default function RootLayout({
@@ -30,7 +30,7 @@ export default function RootLayout({
       <head>
         <link rel="apple-touch-icon" href="/icon-192.png" />
       </head>
-      <body className="min-h-screen">
+      <body className="min-h-screen bg-zinc-950">
         {children}
       </body>
     </html>

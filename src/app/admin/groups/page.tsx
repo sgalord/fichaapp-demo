@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { Group, Profile } from '@/types'
 import { Plus, Trash2, Users, Loader2, X, Edit2 } from 'lucide-react'
+import { initials, avatarColor } from '@/lib/utils'
 
 interface GroupWithCount extends Group {
   member_count: number
@@ -12,24 +13,18 @@ interface GroupWithCount extends Group {
 
 export default function GroupsPage() {
   const supabase = createClient()
-  const [groups, setGroups]     = useState<GroupWithCount[]>([])
-  const [loading, setLoading]   = useState(true)
+  const [groups, setGroups]       = useState<GroupWithCount[]>([])
+  const [loading, setLoading]     = useState(true)
   const [showModal, setShowModal] = useState(false)
-  const [editing, setEditing]   = useState<Group | null>(null)
-  const [form, setForm]         = useState({ name: '', description: '' })
-  const [saving, setSaving]     = useState(false)
+  const [editing, setEditing]     = useState<Group | null>(null)
+  const [form, setForm]           = useState({ name: '', description: '' })
+  const [saving, setSaving]       = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
 
   async function load() {
     setLoading(true)
-    const { data: grps } = await supabase
-      .from('groups')
-      .select('id, name, description, created_at')
-      .order('name')
-
-    const { data: ug } = await supabase
-      .from('user_groups')
-      .select('group_id, user_id, profiles!user_id(id, full_name)')
+    const { data: grps } = await supabase.from('groups').select('id, name, description, created_at').order('name')
+    const { data: ug }   = await supabase.from('user_groups').select('group_id, user_id, profiles!user_id(id, full_name)')
 
     const byGroup: Record<string, Pick<Profile, 'id' | 'full_name'>[]> = {}
     for (const row of (ug ?? []) as unknown as { group_id: string; profiles: Pick<Profile, 'id' | 'full_name'> }[]) {
@@ -66,26 +61,14 @@ export default function GroupsPage() {
   async function handleSave() {
     setSaving(true)
     setFormError(null)
-
-    if (!form.name.trim()) {
-      setFormError('El nombre es obligatorio')
-      setSaving(false)
-      return
-    }
-
+    if (!form.name.trim()) { setFormError('El nombre es obligatorio'); setSaving(false); return }
     if (editing) {
-      const { error } = await supabase
-        .from('groups')
-        .update({ name: form.name.trim(), description: form.description || null })
-        .eq('id', editing.id)
+      const { error } = await supabase.from('groups').update({ name: form.name.trim(), description: form.description || null }).eq('id', editing.id)
       if (error) { setFormError('Error al actualizar'); setSaving(false); return }
     } else {
-      const { error } = await supabase
-        .from('groups')
-        .insert({ name: form.name.trim(), description: form.description || null })
+      const { error } = await supabase.from('groups').insert({ name: form.name.trim(), description: form.description || null })
       if (error) { setFormError('Error al crear grupo'); setSaving(false); return }
     }
-
     setShowModal(false)
     await load()
     setSaving(false)
@@ -98,101 +81,104 @@ export default function GroupsPage() {
   }
 
   return (
-    <div className="px-4 py-5 space-y-4">
+    <div className="space-y-5 animate-fade-in">
+
+      {/* ── Header ── */}
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-gray-900">Grupos</h1>
-        <button onClick={openNew} className="btn-primary py-2.5 px-4 text-sm flex items-center gap-1.5">
-          <Plus size={18} />Nuevo
+        <div>
+          <h1 className="text-2xl font-bold text-white">Grupos</h1>
+          <p className="text-zinc-500 text-sm mt-0.5">Asigna obras a conjuntos de trabajadores</p>
+        </div>
+        <button onClick={openNew} className="btn-primary gap-2">
+          <Plus size={16} />Nuevo
         </button>
       </div>
 
-      <p className="text-sm text-gray-500">
-        Los grupos permiten asignar ubicaciones de obra a conjuntos de trabajadores.
-      </p>
-
+      {/* ── Lista ── */}
       {loading ? (
-        <div className="flex justify-center py-10">
-          <Loader2 className="w-6 h-6 text-orange-500 animate-spin" />
+        <div className="flex justify-center py-12">
+          <Loader2 className="w-6 h-6 text-zinc-500 animate-spin" />
         </div>
       ) : groups.length === 0 ? (
-        <div className="text-center py-12 text-gray-400">
+        <div className="text-center py-16 text-zinc-600">
           <Users size={40} className="mx-auto mb-3 opacity-30" />
-          <p className="text-sm">No hay grupos creados</p>
+          <p className="text-sm mb-3">No hay grupos creados</p>
+          <button onClick={openNew} className="btn-secondary gap-2">
+            <Plus size={15} />Crear grupo
+          </button>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {groups.map(g => (
             <div key={g.id} className="card">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <div className="bg-orange-100 rounded-lg p-2">
-                      <Users size={18} className="text-orange-500" />
-                    </div>
-                    <div>
-                      <p className="font-semibold text-gray-900">{g.name}</p>
-                      {g.description && (
-                        <p className="text-xs text-gray-500 mt-0.5">{g.description}</p>
-                      )}
-                    </div>
-                  </div>
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 bg-zinc-800 border border-zinc-700 rounded-xl flex items-center justify-center flex-shrink-0">
+                  <Users size={18} className="text-zinc-400" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-zinc-200">{g.name}</p>
+                  {g.description && <p className="text-xs text-zinc-500 mt-0.5">{g.description}</p>}
+                  <span className="badge-blue mt-1.5">{g.member_count} miembros</span>
+                </div>
+              </div>
 
-                  {g.members.length > 0 && (
-                    <div className="mt-2.5 flex flex-wrap gap-1.5">
-                      {g.members.slice(0, 5).map(m => (
-                        <span key={m.id} className="badge-gray">{m.full_name}</span>
-                      ))}
-                      {g.members.length > 5 && (
-                        <span className="badge-gray">+{g.members.length - 5} más</span>
-                      )}
+              {g.members.length > 0 && (
+                <div className="mt-3 flex items-center gap-1.5 flex-wrap">
+                  {g.members.slice(0, 4).map(m => (
+                    <div key={m.id} title={m.full_name}
+                      className={`${avatarColor(m.full_name)} w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-bold`}>
+                      {initials(m.full_name)}
                     </div>
+                  ))}
+                  {g.members.length > 4 && (
+                    <span className="text-xs text-zinc-500">+{g.members.length - 4} más</span>
                   )}
                 </div>
+              )}
 
-                <div className="flex gap-1 flex-shrink-0">
-                  <span className="badge-blue self-start">{g.member_count} miembros</span>
-                  <button onClick={() => openEdit(g)} className="p-2 text-gray-400 hover:text-orange-500 transition-colors">
-                    <Edit2 size={16} />
-                  </button>
-                  <button onClick={() => handleDelete(g.id)} className="p-2 text-gray-400 hover:text-red-500 transition-colors">
-                    <Trash2 size={16} />
-                  </button>
-                </div>
+              <div className="flex items-center gap-1 mt-3 pt-3 border-t border-zinc-800">
+                <button onClick={() => openEdit(g)} className="btn-ghost text-xs gap-1 flex-1 justify-center">
+                  <Edit2 size={13} /> Editar
+                </button>
+                <button onClick={() => handleDelete(g.id)} className="btn-ghost text-xs gap-1 flex-1 justify-center text-red-500 hover:text-red-400 hover:bg-red-500/10">
+                  <Trash2 size={13} /> Eliminar
+                </button>
               </div>
             </div>
           ))}
         </div>
       )}
 
+      {/* ── Modal ── */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-end">
-          <div className="bg-white w-full max-w-2xl mx-auto rounded-t-3xl">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-              <h2 className="font-bold text-gray-900 text-lg">
-                {editing ? 'Editar grupo' : 'Nuevo grupo'}
-              </h2>
-              <button onClick={() => setShowModal(false)} className="text-gray-400 p-1">
-                <X size={22} />
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end lg:items-center justify-center p-4 animate-fade-in">
+          <div className="bg-zinc-900 border border-zinc-800 w-full max-w-md rounded-2xl shadow-2xl">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800">
+              <h2 className="font-semibold text-white">{editing ? 'Editar grupo' : 'Nuevo grupo'}</h2>
+              <button onClick={() => setShowModal(false)} className="text-zinc-500 hover:text-white p-1">
+                <X size={20} />
               </button>
             </div>
-            <div className="px-5 py-4 pb-8 space-y-4">
+            <div className="px-5 py-5 space-y-4">
               <div>
-                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Nombre del grupo *</label>
+                <label className="text-sm font-medium text-zinc-300 mb-1.5 block">Nombre del grupo *</label>
                 <input className="input" value={form.name}
                   onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
                   placeholder="Ej: Equipo Norte" />
               </div>
               <div>
-                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Descripción</label>
+                <label className="text-sm font-medium text-zinc-300 mb-1.5 block">Descripción</label>
                 <input className="input" value={form.description}
                   onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
                   placeholder="Descripción opcional" />
               </div>
-              {formError && <p className="bg-red-50 text-red-600 text-sm rounded-xl px-4 py-3">{formError}</p>}
+              {formError && (
+                <p className="bg-red-500/10 border border-red-500/20 text-red-400 text-sm rounded-xl px-4 py-3">{formError}</p>
+              )}
               <div className="flex gap-3 pt-2">
                 <button onClick={() => setShowModal(false)} className="btn-secondary flex-1">Cancelar</button>
-                <button onClick={handleSave} disabled={saving} className="btn-primary flex-1 flex items-center justify-center gap-2">
-                  {saving ? <><Loader2 size={16} className="animate-spin" />Guardando...</> : 'Guardar'}
+                <button onClick={handleSave} disabled={saving} className="btn-primary flex-1 gap-2">
+                  {saving ? <><Loader2 size={14} className="animate-spin" />Guardando...</> : 'Guardar'}
                 </button>
               </div>
             </div>

@@ -6,7 +6,7 @@ import { initials, avatarColor } from '@/lib/utils'
 import type { Profile, Group } from '@/types'
 import {
   Plus, Search, Edit2, UserX, UserCheck,
-  Loader2, X, Eye, EyeOff, ChevronDown,
+  Loader2, X, Eye, EyeOff, ChevronDown, Users,
 } from 'lucide-react'
 
 type WorkerWithGroups = Profile & { groups: Group[] }
@@ -21,7 +21,6 @@ export default function WorkersPage() {
   const [showModal, setShowModal] = useState(false)
   const [editing, setEditing]     = useState<WorkerWithGroups | null>(null)
 
-  // Form state
   const [form, setForm] = useState({
     full_name: '', email: '', password: '', phone: '',
     role: 'worker', group_ids: [] as string[],
@@ -32,7 +31,6 @@ export default function WorkersPage() {
 
   async function load() {
     setLoading(true)
-    // Trabajadores con sus grupos en una sola consulta join
     const { data: profiles } = await supabase
       .from('profiles')
       .select('id, full_name, phone, role, active, created_at, updated_at')
@@ -75,14 +73,7 @@ export default function WorkersPage() {
 
   function openEdit(w: WorkerWithGroups) {
     setEditing(w)
-    setForm({
-      full_name: w.full_name,
-      email: '',
-      password: '',
-      phone: w.phone ?? '',
-      role: w.role,
-      group_ids: w.groups.map(g => g.id),
-    })
+    setForm({ full_name: w.full_name, email: '', password: '', phone: w.phone ?? '', role: w.role, group_ids: w.groups.map(g => g.id) })
     setFormError(null)
     setShowModal(true)
   }
@@ -90,20 +81,13 @@ export default function WorkersPage() {
   async function handleSave() {
     setSaving(true)
     setFormError(null)
-
     const res = await fetch(editing ? `/api/workers/${editing.id}` : '/api/workers', {
       method: editing ? 'PUT' : 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(form),
     })
     const json = await res.json()
-
-    if (!res.ok) {
-      setFormError(json.error ?? 'Error al guardar')
-      setSaving(false)
-      return
-    }
-
+    if (!res.ok) { setFormError(json.error ?? 'Error al guardar'); setSaving(false); return }
     setShowModal(false)
     await load()
     setSaving(false)
@@ -123,18 +107,28 @@ export default function WorkersPage() {
     w.phone?.includes(query)
   )
 
+  const activeCount   = workers.filter(w => w.active).length
+  const inactiveCount = workers.filter(w => !w.active).length
+
   return (
-    <div className="px-4 py-5 space-y-4">
+    <div className="space-y-5 animate-fade-in">
+
+      {/* ── Header ── */}
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-gray-900">Trabajadores</h1>
-        <button onClick={openNew} className="btn-primary py-2.5 px-4 text-sm flex items-center gap-1.5">
-          <Plus size={18} />Nuevo
+        <div>
+          <h1 className="text-2xl font-bold text-white">Trabajadores</h1>
+          <p className="text-zinc-500 text-sm mt-0.5">
+            {activeCount} activos · {inactiveCount} inactivos
+          </p>
+        </div>
+        <button onClick={openNew} className="btn-primary gap-2">
+          <Plus size={16} />Nuevo
         </button>
       </div>
 
-      {/* Buscador */}
+      {/* ── Buscador ── */}
       <div className="relative">
-        <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
         <input
           type="search"
           value={query}
@@ -144,186 +138,155 @@ export default function WorkersPage() {
         />
       </div>
 
+      {/* ── Lista ── */}
       {loading ? (
-        <div className="flex justify-center py-10">
-          <Loader2 className="w-6 h-6 text-orange-500 animate-spin" />
+        <div className="flex justify-center py-12">
+          <Loader2 className="w-6 h-6 text-zinc-500 animate-spin" />
         </div>
       ) : (
         <div className="space-y-2">
           {filtered.map(w => (
-            <div key={w.id} className={`card flex items-center gap-3 ${!w.active ? 'opacity-60' : ''}`}>
+            <div key={w.id} className={`card flex items-center gap-3 ${!w.active ? 'opacity-50' : ''}`}>
               <div className={`${avatarColor(w.full_name)} w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-bold flex-shrink-0`}>
                 {initials(w.full_name)}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="font-semibold text-gray-900 text-sm truncate">{w.full_name}</p>
+                <p className="font-medium text-zinc-200 text-sm truncate">{w.full_name}</p>
                 <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                  <span className={w.role === 'worker' ? 'badge-gray' : 'badge-orange'}>
+                  <span className={w.role === 'worker' ? 'badge-gray' : 'badge-white'}>
                     {w.role === 'worker' ? 'Trabajador' : 'Admin'}
                   </span>
                   {!w.active && <span className="badge-red">Inactivo</span>}
-                  {w.groups.map(g => (
+                  {w.groups.slice(0, 2).map(g => (
                     <span key={g.id} className="badge-blue">{g.name}</span>
                   ))}
+                  {w.groups.length > 2 && (
+                    <span className="badge-gray">+{w.groups.length - 2}</span>
+                  )}
                 </div>
               </div>
               <div className="flex gap-1 flex-shrink-0">
-                <button onClick={() => openEdit(w)} className="p-2 text-gray-400 hover:text-orange-500 transition-colors">
-                  <Edit2 size={16} />
+                <button onClick={() => openEdit(w)} className="p-2 text-zinc-500 hover:text-white transition-colors rounded-lg hover:bg-zinc-800">
+                  <Edit2 size={15} />
                 </button>
-                <button onClick={() => toggleActive(w)} className="p-2 text-gray-400 hover:text-red-500 transition-colors" title={w.active ? 'Desactivar' : 'Activar'}>
-                  {w.active ? <UserX size={16} /> : <UserCheck size={16} />}
+                <button onClick={() => toggleActive(w)} className="p-2 text-zinc-500 hover:text-white transition-colors rounded-lg hover:bg-zinc-800" title={w.active ? 'Desactivar' : 'Activar'}>
+                  {w.active ? <UserX size={15} /> : <UserCheck size={15} />}
                 </button>
               </div>
             </div>
           ))}
 
           {filtered.length === 0 && (
-            <p className="text-center text-gray-400 py-8 text-sm">
-              {query ? 'No hay resultados' : 'Sin trabajadores'}
-            </p>
+            <div className="text-center py-14 text-zinc-600">
+              <Users size={36} className="mx-auto mb-3 opacity-30" />
+              <p className="text-sm">{query ? 'No hay resultados' : 'Sin trabajadores registrados'}</p>
+            </div>
           )}
         </div>
       )}
 
-      {/* Modal crear/editar */}
+      {/* ── Modal ── */}
       {showModal && (
-        <Modal
-          title={editing ? 'Editar trabajador' : 'Nuevo trabajador'}
-          onClose={() => setShowModal(false)}
-        >
-          <div className="space-y-4">
-            <div>
-              <label className="text-sm font-medium text-gray-700 mb-1.5 block">Nombre completo *</label>
-              <input
-                className="input"
-                value={form.full_name}
-                onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))}
-                placeholder="Juan García"
-              />
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end lg:items-center justify-center p-4 animate-fade-in">
+          <div className="bg-zinc-900 border border-zinc-800 w-full max-w-md rounded-2xl max-h-[92vh] overflow-y-auto shadow-2xl">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800 sticky top-0 bg-zinc-900">
+              <h2 className="font-semibold text-white">{editing ? 'Editar trabajador' : 'Nuevo trabajador'}</h2>
+              <button onClick={() => setShowModal(false)} className="text-zinc-500 hover:text-white p-1">
+                <X size={20} />
+              </button>
             </div>
+            <div className="px-5 py-5 space-y-4">
 
-            {!editing && (
               <div>
-                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Email *</label>
-                <input
-                  type="email"
-                  className="input"
-                  value={form.email}
-                  onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
-                  placeholder="juan@email.com"
-                />
+                <label className="text-sm font-medium text-zinc-300 mb-1.5 block">Nombre completo *</label>
+                <input className="input" value={form.full_name}
+                  onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))}
+                  placeholder="Juan García" />
               </div>
-            )}
 
-            <div>
-              <label className="text-sm font-medium text-gray-700 mb-1.5 block">
-                {editing ? 'Nueva contraseña (dejar vacío para no cambiar)' : 'Contraseña *'}
-              </label>
-              <div className="relative">
-                <input
-                  type={showPass ? 'text' : 'password'}
-                  className="input pr-12"
-                  value={form.password}
-                  onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
-                  placeholder="••••••••"
-                />
-                <button type="button" onClick={() => setShowPass(v => !v)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
-                  {showPass ? <EyeOff size={18} /> : <Eye size={18} />}
+              {!editing && (
+                <div>
+                  <label className="text-sm font-medium text-zinc-300 mb-1.5 block">Email *</label>
+                  <input type="email" className="input" value={form.email}
+                    onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+                    placeholder="juan@email.com" />
+                </div>
+              )}
+
+              <div>
+                <label className="text-sm font-medium text-zinc-300 mb-1.5 block">
+                  {editing ? 'Nueva contraseña (vacío = no cambiar)' : 'Contraseña *'}
+                </label>
+                <div className="relative">
+                  <input
+                    type={showPass ? 'text' : 'password'}
+                    className="input pr-12"
+                    value={form.password}
+                    onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
+                    placeholder="••••••••"
+                  />
+                  <button type="button" onClick={() => setShowPass(v => !v)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300">
+                    {showPass ? <EyeOff size={17} /> : <Eye size={17} />}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium text-zinc-300 mb-1.5 block">Teléfono</label>
+                <input type="tel" className="input" value={form.phone}
+                  onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
+                  placeholder="600 000 000" />
+              </div>
+
+              <div>
+                <label className="text-sm font-medium text-zinc-300 mb-1.5 block">Rol</label>
+                <div className="relative">
+                  <select className="input appearance-none pr-10" value={form.role}
+                    onChange={e => setForm(f => ({ ...f, role: e.target.value }))}>
+                    <option value="worker">Trabajador</option>
+                    <option value="admin">Administrador</option>
+                  </select>
+                  <ChevronDown size={15} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium text-zinc-300 mb-2 block">Grupos</label>
+                <div className="flex flex-wrap gap-2">
+                  {groups.map(g => (
+                    <button key={g.id} type="button"
+                      onClick={() => setForm(f => ({
+                        ...f,
+                        group_ids: f.group_ids.includes(g.id)
+                          ? f.group_ids.filter(id => id !== g.id)
+                          : [...f.group_ids, g.id],
+                      }))}
+                      className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors border ${
+                        form.group_ids.includes(g.id)
+                          ? 'bg-white text-zinc-950 border-white'
+                          : 'bg-transparent text-zinc-400 border-zinc-700 hover:border-zinc-500'
+                      }`}
+                    >{g.name}</button>
+                  ))}
+                  {groups.length === 0 && <p className="text-sm text-zinc-600">Sin grupos creados</p>}
+                </div>
+              </div>
+
+              {formError && (
+                <p className="bg-red-500/10 border border-red-500/20 text-red-400 text-sm rounded-xl px-4 py-3">{formError}</p>
+              )}
+
+              <div className="flex gap-3 pt-2">
+                <button onClick={() => setShowModal(false)} className="btn-secondary flex-1">Cancelar</button>
+                <button onClick={handleSave} disabled={saving} className="btn-primary flex-1 gap-2">
+                  {saving ? <><Loader2 size={14} className="animate-spin" />Guardando...</> : 'Guardar'}
                 </button>
               </div>
             </div>
-
-            <div>
-              <label className="text-sm font-medium text-gray-700 mb-1.5 block">Teléfono</label>
-              <input
-                type="tel"
-                className="input"
-                value={form.phone}
-                onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
-                placeholder="600 000 000"
-              />
-            </div>
-
-            <div>
-              <label className="text-sm font-medium text-gray-700 mb-1.5 block">Rol</label>
-              <div className="relative">
-                <select
-                  className="input appearance-none pr-10"
-                  value={form.role}
-                  onChange={e => setForm(f => ({ ...f, role: e.target.value }))}
-                >
-                  <option value="worker">Trabajador</option>
-                  <option value="admin">Administrador</option>
-                </select>
-                <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-              </div>
-            </div>
-
-            <div>
-              <label className="text-sm font-medium text-gray-700 mb-1.5 block">Grupos</label>
-              <div className="flex flex-wrap gap-2">
-                {groups.map(g => (
-                  <button
-                    key={g.id}
-                    type="button"
-                    onClick={() => setForm(f => ({
-                      ...f,
-                      group_ids: f.group_ids.includes(g.id)
-                        ? f.group_ids.filter(id => id !== g.id)
-                        : [...f.group_ids, g.id],
-                    }))}
-                    className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                      form.group_ids.includes(g.id)
-                        ? 'bg-orange-500 text-white'
-                        : 'bg-gray-100 text-gray-600'
-                    }`}
-                  >
-                    {g.name}
-                  </button>
-                ))}
-                {groups.length === 0 && (
-                  <p className="text-sm text-gray-400">No hay grupos creados</p>
-                )}
-              </div>
-            </div>
-
-            {formError && (
-              <p className="bg-red-50 text-red-600 text-sm rounded-xl px-4 py-3">{formError}</p>
-            )}
-
-            <div className="flex gap-3 pt-2">
-              <button onClick={() => setShowModal(false)} className="btn-secondary flex-1">
-                Cancelar
-              </button>
-              <button onClick={handleSave} disabled={saving} className="btn-primary flex-1 flex items-center justify-center gap-2">
-                {saving ? <><Loader2 size={16} className="animate-spin" />Guardando...</> : 'Guardar'}
-              </button>
-            </div>
           </div>
-        </Modal>
-      )}
-    </div>
-  )
-}
-
-function Modal({ title, children, onClose }: {
-  title: string
-  children: React.ReactNode
-  onClose: () => void
-}) {
-  return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-end">
-      <div className="bg-white w-full max-w-2xl mx-auto rounded-t-3xl max-h-[92vh] overflow-y-auto">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 sticky top-0 bg-white">
-          <h2 className="font-bold text-gray-900 text-lg">{title}</h2>
-          <button onClick={onClose} className="text-gray-400 p-1">
-            <X size={22} />
-          </button>
         </div>
-        <div className="px-5 py-4 pb-8">{children}</div>
-      </div>
+      )}
     </div>
   )
 }
