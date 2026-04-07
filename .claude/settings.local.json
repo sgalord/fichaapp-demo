@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:pusher.com)",
+      "WebFetch(domain:supabase.com)",
+      "WebFetch(domain:designrevision.com)",
+      "WebFetch(domain:www.bytebase.com)",
+      "WebFetch(domain:chat2db.ai)",
+      "Bash(npm install:*)",
+      "Bash(npm run:*)"
+    ]
+  }
+}
