@@ -11,12 +11,13 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json()
-  const { type, latitude, longitude, work_location_id, photo_url } = body as {
+  const { type, latitude, longitude, work_location_id, photo_url, device_fingerprint } = body as {
     type: 'in' | 'out'
     latitude: number
     longitude: number
     work_location_id: string | null
     photo_url?: string | null
+    device_fingerprint?: string | null
   }
 
   if (!['in', 'out'].includes(type)) {
@@ -50,9 +51,10 @@ export async function POST(req: NextRequest) {
       distance_meters,
       within_radius,
       photo_url: photo_url ?? null,
+      device_fingerprint: device_fingerprint ?? null,
       timestamp: new Date().toISOString(),
     })
-    .select('id, type, timestamp, distance_meters, within_radius, photo_url')
+    .select('id, type, timestamp, distance_meters, within_radius, photo_url, device_fingerprint')
     .single()
 
   if (error) {

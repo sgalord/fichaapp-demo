@@ -58,6 +58,7 @@ export interface CheckIn {
   modified_by: string | null
   modified_at: string | null
   photo_url: string | null
+  device_fingerprint: string | null
   timestamp: string
   created_at: string
   // Joins

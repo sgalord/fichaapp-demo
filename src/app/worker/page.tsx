@@ -6,6 +6,7 @@ import {
   haversineDistance, formatTime, formatDate, distanceLabel,
   todayISO, mapsUrl, avatarColor, initials,
 } from '@/lib/utils'
+import { getDeviceFingerprint } from '@/lib/device-fingerprint'
 import type { Profile, WorkLocation, CheckIn } from '@/types'
 import {
   MapPin, Clock, CheckCircle2, XCircle, LogOut,
@@ -170,7 +171,10 @@ export default function WorkerPage() {
 
     setUploading(false)
 
-    // 2. Registrar fichaje
+    // 2. Huella del dispositivo (silenciosa, no bloquea si falla)
+    const device_fingerprint = await getDeviceFingerprint().catch(() => null)
+
+    // 3. Registrar fichaje
     try {
       const res = await fetch('/api/checkin', {
         method: 'POST',
@@ -181,6 +185,7 @@ export default function WorkerPage() {
           longitude: userCoords.lng,
           work_location_id: location?.id ?? null,
           photo_url,
+          device_fingerprint,
         }),
       })
       const json = await res.json()
