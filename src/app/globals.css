@@ -9,7 +9,7 @@
   }
 
   body {
-    @apply bg-gray-50 text-gray-900 antialiased;
+    @apply bg-zinc-950 text-zinc-100 antialiased;
     overscroll-behavior: none;
   }
 
@@ -20,51 +20,85 @@
 }
 
 @layer components {
-  /* Botón principal */
+  /* ── Botones ── */
   .btn-primary {
-    @apply bg-orange-500 text-white font-semibold rounded-2xl
-           px-6 py-4 text-base active:scale-95 transition-all
-           disabled:opacity-50 disabled:cursor-not-allowed
-           shadow-lg shadow-orange-200;
+    @apply bg-white text-zinc-950 font-semibold rounded-xl
+           px-6 py-3.5 text-sm active:scale-95 transition-all
+           disabled:opacity-40 disabled:cursor-not-allowed
+           hover:bg-zinc-100 shadow-sm inline-flex items-center justify-center;
   }
 
   .btn-secondary {
-    @apply bg-white text-gray-700 font-semibold rounded-2xl
-           px-6 py-4 text-base border border-gray-200
-           active:scale-95 transition-all;
+    @apply bg-zinc-800 text-zinc-200 font-semibold rounded-xl
+           px-6 py-3.5 text-sm border border-zinc-700
+           active:scale-95 transition-all hover:bg-zinc-700
+           inline-flex items-center justify-center;
   }
 
   .btn-danger {
-    @apply bg-red-500 text-white font-semibold rounded-2xl
-           px-6 py-4 text-base active:scale-95 transition-all
-           disabled:opacity-50;
+    @apply bg-red-500 text-white font-semibold rounded-xl
+           px-6 py-3.5 text-sm active:scale-95 transition-all
+           disabled:opacity-40 hover:bg-red-600
+           inline-flex items-center justify-center;
   }
 
-  /* Card base */
+  .btn-ghost {
+    @apply text-zinc-400 font-medium rounded-xl
+           px-4 py-2.5 text-sm transition-all
+           hover:text-zinc-200 hover:bg-zinc-800
+           inline-flex items-center justify-center;
+  }
+
+  /* ── Cards ── */
   .card {
-    @apply bg-white rounded-2xl shadow-sm border border-gray-100 p-4;
+    @apply bg-zinc-900 rounded-xl border border-zinc-800 p-4;
   }
 
-  /* Input base */
+  .card-hover {
+    @apply bg-zinc-900 rounded-xl border border-zinc-800 p-4
+           hover:border-zinc-700 transition-colors cursor-pointer;
+  }
+
+  /* ── Inputs ── */
   .input {
-    @apply w-full rounded-xl border border-gray-200 px-4 py-3
-           focus:outline-none focus:ring-2 focus:ring-orange-400
-           bg-white placeholder:text-gray-400;
+    @apply w-full rounded-xl border border-zinc-700 px-4 py-3
+           focus:outline-none focus:ring-1 focus:ring-zinc-500 focus:border-zinc-500
+           bg-zinc-800 placeholder:text-zinc-600 text-zinc-100 transition-colors;
   }
 
-  /* Badge */
-  .badge-green  { @apply inline-flex items-center rounded-full bg-green-100 text-green-700 text-xs font-medium px-2 py-0.5; }
-  .badge-red    { @apply inline-flex items-center rounded-full bg-red-100   text-red-700   text-xs font-medium px-2 py-0.5; }
-  .badge-orange { @apply inline-flex items-center rounded-full bg-orange-100 text-orange-700 text-xs font-medium px-2 py-0.5; }
-  .badge-gray   { @apply inline-flex items-center rounded-full bg-gray-100  text-gray-600  text-xs font-medium px-2 py-0.5; }
-  .badge-blue   { @apply inline-flex items-center rounded-full bg-blue-100  text-blue-700  text-xs font-medium px-2 py-0.5; }
+  /* ── Badges ── */
+  .badge-green  { @apply inline-flex items-center gap-1 rounded-full bg-emerald-500/15 text-emerald-400 text-xs font-medium px-2.5 py-0.5; }
+  .badge-red    { @apply inline-flex items-center gap-1 rounded-full bg-red-500/15     text-red-400     text-xs font-medium px-2.5 py-0.5; }
+  .badge-orange { @apply inline-flex items-center gap-1 rounded-full bg-amber-500/15   text-amber-400   text-xs font-medium px-2.5 py-0.5; }
+  .badge-gray   { @apply inline-flex items-center gap-1 rounded-full bg-zinc-700       text-zinc-400    text-xs font-medium px-2.5 py-0.5; }
+  .badge-blue   { @apply inline-flex items-center gap-1 rounded-full bg-blue-500/15    text-blue-400    text-xs font-medium px-2.5 py-0.5; }
+  .badge-white  { @apply inline-flex items-center gap-1 rounded-full bg-white/10       text-zinc-200    text-xs font-medium px-2.5 py-0.5; }
+
+  /* ── Section title ── */
+  .section-title {
+    @apply text-xs font-semibold text-zinc-500 uppercase tracking-wider;
+  }
+
+  /* ── Divider ── */
+  .divider {
+    @apply border-t border-zinc-800;
+  }
 }
 
-/* Scrollbar mínima */
+/* ── Scrollbar minimal ── */
 ::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { @apply bg-gray-300 rounded-full; }
+::-webkit-scrollbar-thumb { @apply bg-zinc-700 rounded-full; }
 
-/* Safe area para iPhone (notch/home indicator) */
+/* ── Safe areas para iPhone ── */
 .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
 .safe-top    { padding-top:    env(safe-area-inset-top); }
+
+/* ── Range input dark theme ── */
+input[type="range"] {
+  accent-color: #ffffff;
+}
+input[type="date"],
+input[type="datetime-local"] {
+  color-scheme: dark;
+}

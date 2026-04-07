@@ -10,6 +10,7 @@ import type { Profile, WorkLocation, CheckIn } from '@/types'
 import {
   MapPin, Clock, CheckCircle2, XCircle, LogOut,
   Navigation, AlertTriangle, ChevronRight, Loader2, RefreshCw,
+  Building2,
 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -18,24 +19,22 @@ type GeoStatus = 'idle' | 'loading' | 'ok' | 'error'
 
 export default function WorkerPage() {
   const supabase = createClient()
-  const router = useRouter()
+  const router   = useRouter()
 
-  const [profile, setProfile]         = useState<Profile | null>(null)
-  const [location, setLocation]       = useState<WorkLocation | null>(null)
+  const [profile, setProfile]             = useState<Profile | null>(null)
+  const [location, setLocation]           = useState<WorkLocation | null>(null)
   const [todayCheckIns, setTodayCheckIns] = useState<CheckIn[]>([])
-  const [userCoords, setUserCoords]   = useState<{ lat: number; lng: number } | null>(null)
-  const [distance, setDistance]       = useState<number | null>(null)
-  const [geoStatus, setGeoStatus]     = useState<GeoStatus>('idle')
-  const [checking, setChecking]       = useState(false)
-  const [message, setMessage]         = useState<{ text: string; type: 'ok' | 'err' } | null>(null)
-  const [dataLoading, setDataLoading] = useState(true)
+  const [userCoords, setUserCoords]       = useState<{ lat: number; lng: number } | null>(null)
+  const [distance, setDistance]           = useState<number | null>(null)
+  const [geoStatus, setGeoStatus]         = useState<GeoStatus>('idle')
+  const [checking, setChecking]           = useState(false)
+  const [message, setMessage]             = useState<{ text: string; type: 'ok' | 'err' } | null>(null)
+  const [dataLoading, setDataLoading]     = useState(true)
 
-  // Cargar datos del usuario y ubicación del día
   const loadData = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { router.push('/login'); return }
 
-    // Cargar perfil y fichajes de hoy en paralelo
     const [{ data: prof }, { data: checkIns }] = await Promise.all([
       supabase.from('profiles').select('id,full_name,role,active').eq('id', user.id).single(),
       supabase.from('check_ins')
@@ -49,7 +48,6 @@ export default function WorkerPage() {
     setProfile(prof as Profile)
     setTodayCheckIns((checkIns ?? []) as CheckIn[])
 
-    // Obtener ubicación asignada usando la función RPC optimizada
     const { data: loc } = await supabase.rpc('get_worker_location_for_date', {
       p_worker_id: user.id,
       p_date: todayISO(),
@@ -60,17 +58,11 @@ export default function WorkerPage() {
 
   useEffect(() => { loadData() }, [loadData])
 
-  // Obtener GPS del usuario
   function getPosition(): Promise<GeolocationPosition> {
     return new Promise((resolve, reject) => {
-      if (!navigator.geolocation) {
-        reject(new Error('Tu dispositivo no soporta geolocalización'))
-        return
-      }
+      if (!navigator.geolocation) { reject(new Error('GPS no disponible')); return }
       navigator.geolocation.getCurrentPosition(resolve, reject, {
-        enableHighAccuracy: true,
-        timeout: 15000,
-        maximumAge: 0,
+        enableHighAccuracy: true, timeout: 15000, maximumAge: 0,
       })
     })
   }
@@ -79,12 +71,11 @@ export default function WorkerPage() {
     setGeoStatus('loading')
     setMessage(null)
     try {
-      const pos = await getPosition()
+      const pos    = await getPosition()
       const coords = { lat: pos.coords.latitude, lng: pos.coords.longitude }
       setUserCoords(coords)
       if (location) {
-        const d = haversineDistance(coords.lat, coords.lng, location.latitude, location.longitude)
-        setDistance(d)
+        setDistance(haversineDistance(coords.lat, coords.lng, location.latitude, location.longitude))
       }
       setGeoStatus('ok')
     } catch {
@@ -93,7 +84,6 @@ export default function WorkerPage() {
     }
   }
 
-  // Determinar si el siguiente fichaje es entrada o salida
   const nextType: 'in' | 'out' = todayCheckIns[0]?.type === 'in' ? 'out' : 'in'
   const withinRadius = distance !== null && location !== null && distance <= location.radius
 
@@ -101,7 +91,6 @@ export default function WorkerPage() {
     if (!userCoords || !profile) return
     setChecking(true)
     setMessage(null)
-
     try {
       const res = await fetch('/api/checkin', {
         method: 'POST',
@@ -113,14 +102,10 @@ export default function WorkerPage() {
           work_location_id: location?.id ?? null,
         }),
       })
-
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? 'Error al fichar')
-
       setMessage({
-        text: nextType === 'in'
-          ? '¡Entrada registrada correctamente!'
-          : '¡Salida registrada correctamente!',
+        text: nextType === 'in' ? '¡Entrada registrada!' : '¡Salida registrada!',
         type: 'ok',
       })
       await loadData()
@@ -138,8 +123,8 @@ export default function WorkerPage() {
 
   if (dataLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-8 h-8 text-orange-500 animate-spin" />
+      <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
+        <Loader2 className="w-8 h-8 text-zinc-400 animate-spin" />
       </div>
     )
   }
@@ -147,192 +132,178 @@ export default function WorkerPage() {
   const color = avatarColor(profile?.full_name ?? '')
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col max-w-md mx-auto">
-      {/* Header */}
-      <header className="bg-orange-500 px-4 pt-12 pb-6 safe-top">
+    <div className="min-h-screen bg-zinc-950 flex flex-col max-w-md mx-auto">
+
+      {/* ── Header ── */}
+      <header className="bg-zinc-900 border-b border-zinc-800 px-4 pt-12 pb-5 safe-top sticky top-0 z-10">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className={`${color} w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm`}>
-              {initials(profile?.full_name ?? '')}
+            <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center flex-shrink-0">
+              <Building2 size={15} className="text-zinc-950" strokeWidth={2} />
             </div>
             <div>
-              <p className="text-orange-100 text-xs">Buenos días,</p>
-              <p className="text-white font-semibold text-sm leading-tight">
-                {profile?.full_name}
-              </p>
+              <p className="text-zinc-500 text-xs">BUILT · Hola,</p>
+              <p className="text-white font-semibold text-sm leading-tight">{profile?.full_name}</p>
             </div>
           </div>
           <button
             onClick={handleLogout}
-            className="bg-white/20 p-2 rounded-xl text-white"
-            title="Cerrar sesión"
+            className="p-2 rounded-xl text-zinc-500 hover:text-white hover:bg-zinc-800 transition-colors"
           >
             <LogOut size={18} />
           </button>
         </div>
 
-        {/* Fecha de hoy */}
-        <div className="mt-4 bg-white/20 rounded-2xl px-4 py-3 flex items-center gap-2">
-          <Clock size={16} className="text-white" />
-          <span className="text-white text-sm font-medium capitalize">
-            {formatDate(new Date())}
-          </span>
+        <div className="mt-4 flex items-center gap-2 text-xs text-zinc-500">
+          <Clock size={13} />
+          <span className="capitalize">{formatDate(new Date())}</span>
         </div>
       </header>
 
-      <main className="flex-1 px-4 py-5 space-y-4 pb-8">
-        {/* Tarjeta ubicación */}
+      <main className="flex-1 px-4 py-5 space-y-4 pb-10">
+
+        {/* ── Obra de hoy ── */}
         <div className="card">
           <div className="flex items-start justify-between mb-3">
-            <div>
-              <p className="text-xs text-gray-500 font-medium uppercase tracking-wide mb-1">
-                Obra de hoy
-              </p>
+            <div className="flex-1 min-w-0">
+              <p className="section-title mb-1.5">Obra de hoy</p>
               {location ? (
                 <>
-                  <h2 className="font-bold text-gray-900 text-lg leading-tight">
-                    {location.name}
-                  </h2>
+                  <h2 className="font-bold text-white text-lg leading-tight">{location.name}</h2>
                   {location.address && (
-                    <p className="text-sm text-gray-500 mt-0.5">{location.address}</p>
+                    <p className="text-sm text-zinc-500 mt-0.5 truncate">{location.address}</p>
                   )}
                 </>
               ) : (
-                <p className="text-gray-400 text-sm">No hay obra asignada para hoy</p>
+                <p className="text-zinc-600 text-sm">No hay obra asignada para hoy</p>
               )}
             </div>
             {location && (
               <a
                 href={mapsUrl(location.latitude, location.longitude, location.name)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="bg-orange-50 text-orange-600 p-2 rounded-xl flex-shrink-0"
+                target="_blank" rel="noopener noreferrer"
+                className="ml-3 p-2.5 rounded-xl bg-zinc-800 text-zinc-400 hover:text-white flex-shrink-0"
               >
-                <MapPin size={20} />
+                <MapPin size={18} />
               </a>
             )}
           </div>
 
           {location && (
-            <div className="flex items-center gap-2 text-xs text-gray-500">
-              <span className="badge-orange">Radio: {location.radius} m</span>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="badge-gray">Radio: {location.radius} m</span>
               {distance !== null && (
                 <span className={withinRadius ? 'badge-green' : 'badge-red'}>
-                  Tú: {distanceLabel(distance)}
+                  {withinRadius ? '✓ Dentro del radio' : `Fuera — ${distanceLabel(distance)}`}
                 </span>
               )}
             </div>
           )}
         </div>
 
-        {/* Botón GPS + Fichar */}
+        {/* ── GPS + Fichaje ── */}
         {location ? (
           <div className="space-y-3">
-            {/* Paso 1: Obtener ubicación */}
+            {/* Botón GPS */}
             <button
               onClick={locateMe}
               disabled={geoStatus === 'loading'}
-              className="btn-secondary w-full flex items-center justify-center gap-2"
+              className={`w-full flex items-center justify-center gap-3 rounded-xl px-5 py-4 text-sm font-medium transition-all border ${
+                geoStatus === 'ok'
+                  ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                  : 'bg-zinc-800 border-zinc-700 text-zinc-300 hover:border-zinc-600'
+              }`}
             >
-              {geoStatus === 'loading' ? (
-                <Loader2 size={20} className="animate-spin text-orange-500" />
-              ) : geoStatus === 'ok' ? (
-                <Navigation size={20} className="text-green-500" />
-              ) : (
-                <Navigation size={20} className="text-orange-500" />
-              )}
+              {geoStatus === 'loading'
+                ? <Loader2 size={18} className="animate-spin" />
+                : geoStatus === 'ok'
+                ? <Navigation size={18} />
+                : <Navigation size={18} />
+              }
               {geoStatus === 'ok'
                 ? `Ubicación obtenida · ${distanceLabel(distance!)}`
                 : geoStatus === 'loading'
                 ? 'Obteniendo ubicación...'
-                : 'Obtener mi ubicación'}
+                : 'Obtener mi ubicación GPS'
+              }
             </button>
 
-            {/* Advertencia fuera de radio */}
+            {/* Aviso fuera de radio */}
             {geoStatus === 'ok' && !withinRadius && (
-              <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl p-3">
-                <AlertTriangle size={18} className="text-amber-500 flex-shrink-0 mt-0.5" />
-                <p className="text-sm text-amber-700">
+              <div className="flex items-start gap-2.5 bg-amber-500/10 border border-amber-500/20 rounded-xl p-3.5">
+                <AlertTriangle size={16} className="text-amber-400 flex-shrink-0 mt-0.5" />
+                <p className="text-sm text-amber-300">
                   Estás a <strong>{distanceLabel(distance!)}</strong> del punto de trabajo.
-                  El radio máximo es {location.radius} m. El fichaje se registrará como incidencia.
+                  El radio es {location.radius} m. El fichaje se registrará como incidencia.
                 </p>
               </div>
             )}
 
-            {/* Paso 2: Fichar */}
+            {/* Botón fichar */}
             <button
               onClick={handleCheckIn}
               disabled={geoStatus !== 'ok' || checking}
-              className={`w-full flex items-center justify-center gap-3 rounded-2xl px-6 py-5 text-lg font-bold transition-all active:scale-95 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed ${
+              className={`w-full flex items-center justify-center gap-3 rounded-xl px-6 py-5 text-base font-bold transition-all active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed ${
                 nextType === 'in'
-                  ? 'bg-green-500 text-white shadow-green-200'
-                  : 'bg-red-500 text-white shadow-red-200'
+                  ? 'bg-emerald-500 text-white hover:bg-emerald-400'
+                  : 'bg-red-500 text-white hover:bg-red-400'
               }`}
             >
-              {checking ? (
-                <Loader2 size={24} className="animate-spin" />
-              ) : nextType === 'in' ? (
-                <CheckCircle2 size={24} />
-              ) : (
-                <XCircle size={24} />
-              )}
+              {checking
+                ? <Loader2 size={22} className="animate-spin" />
+                : nextType === 'in'
+                ? <CheckCircle2 size={22} />
+                : <XCircle size={22} />
+              }
               {checking ? 'Registrando...' : nextType === 'in' ? 'Registrar Entrada' : 'Registrar Salida'}
             </button>
           </div>
         ) : (
-          <div className="card flex items-center gap-3 border-dashed border-2 border-gray-200">
-            <AlertTriangle size={20} className="text-amber-500" />
-            <p className="text-sm text-gray-500">
+          <div className="card border-dashed flex items-center gap-3">
+            <AlertTriangle size={18} className="text-amber-500 flex-shrink-0" />
+            <p className="text-sm text-zinc-500">
               No tienes obra asignada hoy. Contacta con tu encargado.
             </p>
           </div>
         )}
 
-        {/* Mensaje resultado */}
+        {/* ── Mensaje resultado ── */}
         {message && (
-          <div className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium ${
+          <div className={`flex items-center gap-2.5 rounded-xl px-4 py-3 text-sm font-medium ${
             message.type === 'ok'
-              ? 'bg-green-50 text-green-700 border border-green-200'
-              : 'bg-red-50 text-red-600 border border-red-200'
+              ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400'
+              : 'bg-red-500/10 border border-red-500/20 text-red-400'
           }`}>
-            {message.type === 'ok'
-              ? <CheckCircle2 size={18} />
-              : <AlertTriangle size={18} />}
+            {message.type === 'ok' ? <CheckCircle2 size={16} /> : <AlertTriangle size={16} />}
             {message.text}
           </div>
         )}
 
-        {/* Fichajes de hoy */}
+        {/* ── Fichajes de hoy ── */}
         <div className="card">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold text-gray-900">Fichajes de hoy</h3>
-            <button onClick={loadData} className="text-gray-400 p-1">
-              <RefreshCw size={16} />
+            <h3 className="text-sm font-semibold text-zinc-300">Fichajes de hoy</h3>
+            <button onClick={loadData} className="p-1.5 text-zinc-600 hover:text-zinc-400 rounded-lg">
+              <RefreshCw size={14} />
             </button>
           </div>
 
           {todayCheckIns.length === 0 ? (
-            <p className="text-sm text-gray-400 text-center py-4">
-              Sin fichajes hoy
-            </p>
+            <p className="text-sm text-zinc-600 text-center py-4">Sin fichajes hoy</p>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-1">
               {todayCheckIns.map((ci) => (
-                <div key={ci.id} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
+                <div key={ci.id} className="flex items-center justify-between py-2.5 border-b border-zinc-800 last:border-0">
                   <div className="flex items-center gap-2">
                     <span className={ci.type === 'in' ? 'badge-green' : 'badge-red'}>
                       {ci.type === 'in' ? 'Entrada' : 'Salida'}
                     </span>
-                    {!ci.within_radius && (
-                      <span className="badge-orange">Fuera radio</span>
-                    )}
+                    {!ci.within_radius && <span className="badge-orange">Fuera radio</span>}
                   </div>
                   <div className="text-right">
-                    <span className="text-sm font-semibold text-gray-900">
-                      {formatTime(ci.timestamp)}
-                    </span>
+                    <span className="text-sm font-semibold text-zinc-200">{formatTime(ci.timestamp)}</span>
                     {ci.distance_meters !== null && (
-                      <p className="text-xs text-gray-400">{distanceLabel(ci.distance_meters)}</p>
+                      <p className="text-xs text-zinc-600">{distanceLabel(ci.distance_meters)}</p>
                     )}
                   </div>
                 </div>
@@ -341,13 +312,16 @@ export default function WorkerPage() {
           )}
         </div>
 
-        {/* Link historial */}
+        {/* ── Historial ── */}
         <Link
           href="/worker/history"
-          className="card flex items-center justify-between hover:bg-gray-50 transition-colors"
+          className="card-hover flex items-center justify-between"
         >
-          <span className="text-sm font-medium text-gray-700">Ver historial completo</span>
-          <ChevronRight size={18} className="text-gray-400" />
+          <div className="flex items-center gap-2.5">
+            <Clock size={16} className="text-zinc-500" />
+            <span className="text-sm font-medium text-zinc-400">Ver historial completo</span>
+          </div>
+          <ChevronRight size={16} className="text-zinc-600" />
         </Link>
       </main>
     </div>
