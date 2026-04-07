@@ -4,19 +4,28 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import {
   haversineDistance, formatTime, formatDate, distanceLabel,
-  todayISO, mapsUrl, avatarColor, initials,
+  todayISO, mapsUrl,
 } from '@/lib/utils'
 import { getDeviceFingerprint } from '@/lib/device-fingerprint'
-import type { Profile, WorkLocation, CheckIn } from '@/types'
+import type { Profile, CheckIn } from '@/types'
 import {
   MapPin, Clock, CheckCircle2, XCircle, LogOut,
   Navigation, AlertTriangle, ChevronRight, Loader2, RefreshCw,
-  Building2, Camera, X, Image, UserCircle,
+  Camera, X, Image, UserCircle, HardHat, CalendarDays,
 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 
 type GeoStatus = 'idle' | 'loading' | 'ok' | 'error'
+
+interface ObraInfo {
+  id: string
+  name: string
+  address: string | null
+  latitude: number | null
+  longitude: number | null
+  radius: number
+}
 
 // Comprime imagen a max 1280px y calidad 0.82 antes de subir
 async function compressImage(file: File): Promise<Blob> {
@@ -43,12 +52,19 @@ async function compressImage(file: File): Promise<Blob> {
   })
 }
 
+function tomorrowISO() {
+  const d = new Date()
+  d.setDate(d.getDate() + 1)
+  return d.toISOString().split('T')[0]
+}
+
 export default function WorkerPage() {
   const supabase = createClient()
   const router   = useRouter()
 
   const [profile, setProfile]             = useState<Profile | null>(null)
-  const [location, setLocation]           = useState<WorkLocation | null>(null)
+  const [todayObra, setTodayObra]         = useState<ObraInfo | null>(null)
+  const [tomorrowObra, setTomorrowObra]   = useState<ObraInfo | null>(null)
   const [todayCheckIns, setTodayCheckIns] = useState<CheckIn[]>([])
   const [userCoords, setUserCoords]       = useState<{ lat: number; lng: number } | null>(null)
   const [distance, setDistance]           = useState<number | null>(null)
@@ -71,8 +87,10 @@ export default function WorkerPage() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { router.push('/login'); return }
 
+    const sb = supabase as unknown as typeof supabase
+
     const [{ data: prof }, { data: checkIns }] = await Promise.all([
-      supabase.from('profiles').select('id,full_name,role,active,avatar_url').eq('id', user.id).single(),
+      supabase.from('profiles').select('id,full_name,role,active,avatar_url,username').eq('id', user.id).single(),
       supabase.from('check_ins')
         .select('id,type,timestamp,distance_meters,within_radius,work_location_id,photo_url')
         .eq('worker_id', user.id)
@@ -84,11 +102,31 @@ export default function WorkerPage() {
     setProfile(prof as Profile)
     setTodayCheckIns((checkIns ?? []) as CheckIn[])
 
-    const { data: loc } = await supabase.rpc('get_worker_location_for_date', {
-      p_worker_id: user.id,
-      p_date: todayISO(),
-    })
-    setLocation(loc?.[0] ?? null)
+    // Obtener obra de hoy y mañana desde obra_assignments
+    const today    = todayISO()
+    const tomorrow = tomorrowISO()
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: todayAssigns } = await (sb as any)
+      .from('obra_assignments')
+      .select('obra:obras(id,name,address,latitude,longitude,radius)')
+      .eq('worker_id', user.id)
+      .eq('date', today)
+      .limit(1)
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: tomorrowAssigns } = await (sb as any)
+      .from('obra_assignments')
+      .select('obra:obras(id,name,address,latitude,longitude,radius)')
+      .eq('worker_id', user.id)
+      .eq('date', tomorrow)
+      .limit(1)
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    setTodayObra((todayAssigns?.[0]?.obra as any) ?? null)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    setTomorrowObra((tomorrowAssigns?.[0]?.obra as any) ?? null)
+
     setDataLoading(false)
   }, [supabase, router])
 
@@ -115,8 +153,8 @@ export default function WorkerPage() {
       const pos    = await getPosition()
       const coords = { lat: pos.coords.latitude, lng: pos.coords.longitude }
       setUserCoords(coords)
-      if (location) {
-        setDistance(haversineDistance(coords.lat, coords.lng, location.latitude, location.longitude))
+      if (todayObra?.latitude && todayObra?.longitude) {
+        setDistance(haversineDistance(coords.lat, coords.lng, todayObra.latitude, todayObra.longitude))
       }
       setGeoStatus('ok')
     } catch {
@@ -131,7 +169,6 @@ export default function WorkerPage() {
     try {
       const blob = await compressImage(file)
       const filename = `${profile.id}/avatar.jpg`
-      // upsert:true sobreescribe si ya existe (evita error "already exists")
       const { error } = await supabase.storage.from('avatars')
         .upload(filename, blob, { contentType: 'image/jpeg', upsert: true })
       if (!error) {
@@ -145,11 +182,9 @@ export default function WorkerPage() {
   function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
-    // Limpiar previa anterior
     if (photoPreview) URL.revokeObjectURL(photoPreview)
     setPhotoFile(file)
     setPhotoPreview(URL.createObjectURL(file))
-    // Reset el input para poder volver a seleccionar
     e.target.value = ''
   }
 
@@ -159,8 +194,8 @@ export default function WorkerPage() {
     setPhotoPreview(null)
   }
 
-  const nextType: 'in' | 'out' = todayCheckIns[0]?.type === 'in' ? 'out' : 'in'
-  const withinRadius = distance !== null && location !== null && distance <= location.radius
+  const nextType: 'in' | 'out'  = todayCheckIns[0]?.type === 'in' ? 'out' : 'in'
+  const withinRadius = distance !== null && todayObra !== null && distance <= todayObra.radius
 
   async function handleCheckIn() {
     if (!userCoords || !profile || !photoFile) return
@@ -170,29 +205,23 @@ export default function WorkerPage() {
 
     let photo_url: string | null = null
 
-    // 1. Subir foto a Supabase Storage
+    // 1. Subir foto
     try {
       const compressed = await compressImage(photoFile)
       const filename   = `${profile.id}/${Date.now()}.jpg`
       const { error: uploadError } = await supabase.storage
         .from('checkin-photos')
         .upload(filename, compressed, { contentType: 'image/jpeg' })
-
       if (!uploadError) {
-        const { data: { publicUrl } } = supabase.storage
-          .from('checkin-photos')
-          .getPublicUrl(filename)
+        const { data: { publicUrl } } = supabase.storage.from('checkin-photos').getPublicUrl(filename)
         photo_url = publicUrl
-      } else {
-        console.warn('Photo upload error:', uploadError.message)
       }
     } catch (err) {
-      console.warn('Error compressing/uploading photo:', err)
+      console.warn('Error uploading photo:', err)
     }
-
     setUploading(false)
 
-    // 2. Huella del dispositivo (silenciosa, no bloquea si falla)
+    // 2. Huella del dispositivo
     const device_fingerprint = await getDeviceFingerprint().catch(() => null)
 
     // 3. Registrar fichaje
@@ -204,7 +233,7 @@ export default function WorkerPage() {
           type: nextType,
           latitude: userCoords.lat,
           longitude: userCoords.lng,
-          work_location_id: location?.id ?? null,
+          obra_id: todayObra?.id ?? null,
           photo_url,
           device_fingerprint,
         }),
@@ -215,7 +244,6 @@ export default function WorkerPage() {
         text: nextType === 'in' ? '¡Entrada registrada!' : '¡Salida registrada!',
         type: 'ok',
       })
-      // Reset foto para siguiente fichaje
       removePhoto()
       setGeoStatus('idle')
       setUserCoords(null)
@@ -257,13 +285,13 @@ export default function WorkerPage() {
               <label htmlFor="worker-avatar" className="cursor-pointer group relative block" title="Cambiar foto de perfil">
                 {profile?.avatar_url ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={profile.avatar_url} alt={profile.full_name}
+                  <img src={profile.avatar_url} alt={profile?.full_name ?? ''}
                     className="w-9 h-9 rounded-full object-cover border border-zinc-700" />
                 ) : (
                   <div className="w-9 h-9 bg-zinc-800 border border-zinc-700 rounded-full flex items-center justify-center">
                     {uploadingAvatar
                       ? <Loader2 size={14} className="text-zinc-400 animate-spin" />
-                      : <Building2 size={14} className="text-zinc-400" strokeWidth={2} />
+                      : <UserCircle size={16} className="text-zinc-500" />
                     }
                   </div>
                 )}
@@ -273,7 +301,7 @@ export default function WorkerPage() {
               </label>
             </div>
             <div>
-              <p className="text-zinc-500 text-xs">BUILT · Hola,</p>
+              <p className="text-zinc-500 text-xs">Hola,</p>
               <p className="text-white font-semibold text-sm leading-tight">{profile?.full_name}</p>
             </div>
           </div>
@@ -297,21 +325,23 @@ export default function WorkerPage() {
         <div className="card">
           <div className="flex items-start justify-between mb-3">
             <div className="flex-1 min-w-0">
-              <p className="section-title mb-1.5">Obra de hoy</p>
-              {location ? (
+              <p className="section-title mb-1.5 flex items-center gap-1.5">
+                <HardHat size={13} className="text-amber-400" />Obra de hoy
+              </p>
+              {todayObra ? (
                 <>
-                  <h2 className="font-bold text-white text-lg leading-tight">{location.name}</h2>
-                  {location.address && (
-                    <p className="text-sm text-zinc-500 mt-0.5 truncate">{location.address}</p>
+                  <h2 className="font-bold text-white text-lg leading-tight">{todayObra.name}</h2>
+                  {todayObra.address && (
+                    <p className="text-sm text-zinc-500 mt-0.5 truncate">{todayObra.address}</p>
                   )}
                 </>
               ) : (
                 <p className="text-zinc-600 text-sm">No hay obra asignada para hoy</p>
               )}
             </div>
-            {location && (
+            {todayObra?.latitude && todayObra?.longitude && (
               <a
-                href={mapsUrl(location.latitude, location.longitude, location.name)}
+                href={mapsUrl(todayObra.latitude, todayObra.longitude, todayObra.name)}
                 target="_blank" rel="noopener noreferrer"
                 className="ml-3 p-2.5 rounded-xl bg-zinc-800 text-zinc-400 hover:text-white flex-shrink-0"
               >
@@ -320,9 +350,9 @@ export default function WorkerPage() {
             )}
           </div>
 
-          {location && (
+          {todayObra && (
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="badge-gray">Radio: {location.radius} m</span>
+              <span className="badge-gray">Radio: {todayObra.radius} m</span>
               {distance !== null && (
                 <span className={withinRadius ? 'badge-green' : 'badge-red'}>
                   {withinRadius ? '✓ Dentro del radio' : `Fuera — ${distanceLabel(distance)}`}
@@ -332,8 +362,34 @@ export default function WorkerPage() {
           )}
         </div>
 
+        {/* ── Obra de mañana ── */}
+        {tomorrowObra && (
+          <div className="card border-zinc-800/50 bg-zinc-900/50">
+            <p className="section-title mb-1.5 flex items-center gap-1.5">
+              <CalendarDays size={13} className="text-zinc-500" />Mañana
+            </p>
+            <div className="flex items-start justify-between">
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-zinc-300">{tomorrowObra.name}</p>
+                {tomorrowObra.address && (
+                  <p className="text-xs text-zinc-600 mt-0.5 truncate">{tomorrowObra.address}</p>
+                )}
+              </div>
+              {tomorrowObra.latitude && tomorrowObra.longitude && (
+                <a
+                  href={mapsUrl(tomorrowObra.latitude, tomorrowObra.longitude, tomorrowObra.name)}
+                  target="_blank" rel="noopener noreferrer"
+                  className="ml-3 p-2 rounded-lg bg-zinc-800 text-zinc-500 hover:text-white flex-shrink-0"
+                >
+                  <MapPin size={15} />
+                </a>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* ── GPS + Foto + Fichaje ── */}
-        {location ? (
+        {todayObra ? (
           <div className="space-y-3">
 
             {/* Paso 1: GPS */}
@@ -366,7 +422,6 @@ export default function WorkerPage() {
               <div className="space-y-2">
                 <p className="text-xs font-medium text-zinc-500 px-1">2 · Fotografía</p>
 
-                {/* Input de cámara oculto */}
                 <input
                   ref={photoInputRef}
                   type="file"
@@ -376,7 +431,6 @@ export default function WorkerPage() {
                   onChange={handlePhotoChange}
                 />
 
-                {/* Previa de la foto */}
                 {photoPreview ? (
                   <div className="relative rounded-xl overflow-hidden border border-zinc-700">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -396,7 +450,6 @@ export default function WorkerPage() {
                     >
                       <X size={14} />
                     </button>
-                    {/* Botón para repetir foto */}
                     <button
                       onClick={() => photoInputRef.current?.click()}
                       className="absolute bottom-2 right-3 bg-zinc-900/80 backdrop-blur-sm rounded-lg px-2.5 py-1 text-xs text-zinc-300 hover:text-white flex items-center gap-1 transition-colors"
@@ -417,12 +470,12 @@ export default function WorkerPage() {
             )}
 
             {/* Aviso fuera de radio */}
-            {geoStatus === 'ok' && !withinRadius && (
+            {geoStatus === 'ok' && !withinRadius && todayObra?.latitude && (
               <div className="flex items-start gap-2.5 bg-amber-500/10 border border-amber-500/20 rounded-xl p-3.5">
                 <AlertTriangle size={16} className="text-amber-400 flex-shrink-0 mt-0.5" />
                 <p className="text-sm text-amber-300">
-                  Estás a <strong>{distanceLabel(distance!)}</strong> del punto de trabajo.
-                  El radio es {location.radius} m. El fichaje se registrará como incidencia.
+                  Estás a <strong>{distanceLabel(distance!)}</strong> de la obra.
+                  El radio es {todayObra.radius} m. El fichaje se registrará como incidencia.
                 </p>
               </div>
             )}

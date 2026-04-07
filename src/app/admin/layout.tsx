@@ -4,19 +4,21 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import {
-  LayoutDashboard, Users, MapPin, ClipboardList,
-  LogOut, Building2, Users2, BarChart3, Menu, X,
+  LayoutDashboard, Users, ClipboardList,
+  LogOut, Users2, BarChart3, Menu, X, HardHat, CalendarDays, Upload,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useState } from 'react'
 
 const NAV = [
-  { href: '/admin',           label: 'Dashboard',    icon: LayoutDashboard },
-  { href: '/admin/workers',   label: 'Trabajadores', icon: Users },
-  { href: '/admin/groups',    label: 'Grupos',       icon: Users2 },
-  { href: '/admin/locations', label: 'Ubicaciones',  icon: MapPin },
-  { href: '/admin/checkins',  label: 'Fichajes',     icon: ClipboardList },
-  { href: '/admin/reports',   label: 'Informes',     icon: BarChart3 },
+  { href: '/admin',              label: 'Dashboard',    icon: LayoutDashboard },
+  { href: '/admin/workers',      label: 'Trabajadores', icon: Users },
+  { href: '/admin/obras',        label: 'Obras',        icon: HardHat },
+  { href: '/admin/asignaciones', label: 'Asignaciones', icon: CalendarDays },
+  { href: '/admin/checkins',     label: 'Fichajes',     icon: ClipboardList },
+  { href: '/admin/groups',       label: 'Grupos',       icon: Users2 },
+  { href: '/admin/reports',      label: 'Informes',     icon: BarChart3 },
+  { href: '/admin/import',       label: 'Importar',     icon: Upload },
 ]
 
 function MobileBottomNav() {
@@ -89,10 +91,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       <aside className="hidden lg:flex flex-col fixed inset-y-0 left-0 w-64 bg-zinc-900 border-r border-zinc-800 z-30">
         {/* Logo */}
         <div className="flex items-center gap-3 px-6 py-5 border-b border-zinc-800">
-          <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center flex-shrink-0">
-            <Building2 size={16} className="text-zinc-950" strokeWidth={2} />
-          </div>
-          <span className="font-bold text-white text-lg tracking-tight">BUILT</span>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.png" alt="BUILT" className="h-8 w-auto" />
           <span className="ml-auto text-[10px] font-medium text-zinc-600 bg-zinc-800 px-2 py-0.5 rounded">Admin</span>
         </div>
 
@@ -115,10 +115,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       <header className="lg:hidden sticky top-0 z-20 bg-zinc-900/95 backdrop-blur-md border-b border-zinc-800 safe-top">
         <div className="flex items-center justify-between px-4 h-14">
           <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 bg-white rounded-md flex items-center justify-center">
-              <Building2 size={14} className="text-zinc-950" strokeWidth={2} />
-            </div>
-            <span className="font-bold text-white text-lg tracking-tight">BUILT</span>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.png" alt="BUILT" className="h-7 w-auto" />
           </div>
           <button
             onClick={() => setDrawerOpen(true)}
@@ -139,10 +137,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <aside className="absolute left-0 top-0 bottom-0 w-72 bg-zinc-900 border-r border-zinc-800 flex flex-col animate-slide-up">
             <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800">
               <div className="flex items-center gap-2.5">
-                <div className="w-7 h-7 bg-white rounded-md flex items-center justify-center">
-                  <Building2 size={14} className="text-zinc-950" strokeWidth={2} />
-                </div>
-                <span className="font-bold text-white tracking-tight">BUILT</span>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/logo.png" alt="BUILT" className="h-7 w-auto" />
               </div>
               <button onClick={() => setDrawerOpen(false)} className="p-1.5 text-zinc-400 hover:text-white">
                 <X size={20} />

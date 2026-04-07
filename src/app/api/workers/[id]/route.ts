@@ -38,7 +38,7 @@ export async function PUT(
   if (!user) return NextResponse.json({ error: 'Acceso denegado' }, { status: 403 })
 
   const body = await req.json()
-  const { full_name, email, phone, role, active, group_ids, password } = body
+  const { full_name, email, phone, role, active, group_ids, password, username } = body
 
   const admin = await createAdminClient()
 
@@ -48,6 +48,7 @@ export async function PUT(
   if (phone     !== undefined) profileUpdates.phone     = phone || null
   if (role      !== undefined) profileUpdates.role      = role
   if (active    !== undefined) profileUpdates.active    = active
+  if (username  !== undefined) profileUpdates.username  = username?.trim().toLowerCase() || null
 
   if (Object.keys(profileUpdates).length > 0) {
     const { error } = await admin.from('profiles').update(profileUpdates).eq('id', id)

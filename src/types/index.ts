@@ -4,6 +4,7 @@ export type CheckInType = 'in' | 'out'
 export interface Profile {
   id: string
   full_name: string
+  username: string | null
   phone: string | null
   role: Role
   active: boolean
@@ -13,6 +14,30 @@ export interface Profile {
   specialty: string | null
   created_at: string
   updated_at: string
+}
+
+export interface Obra {
+  id: string
+  name: string
+  address: string | null
+  latitude: number | null
+  longitude: number | null
+  radius: number           // metros
+  active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface ObraAssignment {
+  id: string
+  obra_id: string
+  worker_id: string | null
+  group_id: string | null
+  date: string             // ISO date YYYY-MM-DD
+  created_at: string
+  // Joins
+  obra?: Pick<Obra, 'id' | 'name' | 'address'>
+  worker?: Pick<Profile, 'id' | 'full_name'>
 }
 
 export interface Group {

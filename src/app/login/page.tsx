@@ -3,7 +3,7 @@
 import { useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { Building2, Eye, EyeOff, Loader2, AlertCircle } from 'lucide-react'
+import { Eye, EyeOff, Loader2, AlertCircle } from 'lucide-react'
 import Link from 'next/link'
 
 export default function LoginPage() {
@@ -19,11 +19,11 @@ function LoginForm() {
   const params   = useSearchParams()
   const supabase = createClient()
 
-  const [email, setEmail]       = useState('')
-  const [password, setPassword] = useState('')
-  const [showPass, setShowPass] = useState(false)
-  const [loading, setLoading]   = useState(false)
-  const [error, setError]       = useState<string | null>(null)
+  const [identifier, setIdentifier] = useState('')
+  const [password, setPassword]     = useState('')
+  const [showPass, setShowPass]     = useState(false)
+  const [loading, setLoading]       = useState(false)
+  const [error, setError]           = useState<string | null>(null)
 
   const accountDisabled = params.get('error') === 'account_disabled'
 
@@ -32,13 +32,37 @@ function LoginForm() {
     setError(null)
     setLoading(true)
 
+    let emailToUse = identifier.trim().toLowerCase()
+
+    // Si no tiene @ → es un usuario, buscar su email
+    if (!emailToUse.includes('@')) {
+      try {
+        const res = await fetch('/api/auth/username', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: emailToUse }),
+        })
+        if (!res.ok) {
+          setError('Usuario o contraseña incorrectos')
+          setLoading(false)
+          return
+        }
+        const json = await res.json()
+        emailToUse = json.email
+      } catch {
+        setError('Error de conexión. Inténtalo de nuevo.')
+        setLoading(false)
+        return
+      }
+    }
+
     const { data, error: authError } = await supabase.auth.signInWithPassword({
-      email: email.trim().toLowerCase(),
+      email: emailToUse,
       password,
     })
 
     if (authError || !data.user) {
-      setError('Email o contraseña incorrectos')
+      setError('Usuario o contraseña incorrectos')
       setLoading(false)
       return
     }
@@ -75,10 +99,10 @@ function LoginForm() {
       <div className="relative w-full max-w-sm">
         {/* Logo */}
         <div className="text-center mb-10">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-white rounded-2xl mb-5 shadow-lg shadow-white/5">
-            <Building2 size={30} className="text-zinc-950" strokeWidth={1.5} />
+          <div className="inline-flex items-center justify-center mb-5">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.png" alt="BUILT" className="h-14 w-auto" />
           </div>
-          <h1 className="text-3xl font-bold text-white tracking-tight">BUILT</h1>
           <p className="text-zinc-500 text-sm mt-1">Control de presencia</p>
         </div>
 
@@ -97,14 +121,17 @@ function LoginForm() {
 
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
-              <label className="text-sm font-medium text-zinc-300 mb-1.5 block">Email</label>
+              <label className="text-sm font-medium text-zinc-300 mb-1.5 block">
+                Usuario o email
+              </label>
               <input
-                type="email"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                placeholder="tu@email.com"
+                type="text"
+                value={identifier}
+                onChange={e => setIdentifier(e.target.value)}
+                placeholder="nombre.apellido o tu@email.com"
                 required
-                autoComplete="email"
+                autoComplete="username"
+                autoCapitalize="none"
                 className="input"
               />
             </div>

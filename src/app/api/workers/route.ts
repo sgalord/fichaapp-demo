@@ -1,6 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 
+export async function GET() {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+
+  const { data: adminProfile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+  if (!['admin', 'superadmin'].includes(adminProfile?.role ?? '')) {
+    return NextResponse.json({ error: 'Acceso denegado' }, { status: 403 })
+  }
+
+  const { data } = await supabase
+    .from('profiles')
+    .select('id, full_name, phone, role, active, avatar_url, username, created_at, updated_at')
+    .in('role', ['worker', 'admin'])
+    .eq('active', true)
+    .order('full_name')
+
+  return NextResponse.json({ data: data ?? [] })
+}
+
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -14,7 +34,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json()
-  const { full_name, email, password, phone, role, group_ids } = body
+  const { full_name, email, password, phone, role, group_ids, username } = body
 
   if (!full_name || !email || !password) {
     return NextResponse.json({ error: 'Nombre, email y contraseña son obligatorios' }, { status: 400 })
@@ -39,9 +59,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Error al crear usuario' }, { status: 500 })
   }
 
+  // Generate username from name if not provided
+  const generatedUsername = username?.trim().toLowerCase() || (() => {
+    const parts = full_name.trim().toLowerCase().split(/\s+/)
+    return parts.length >= 2 ? `${parts[0]}.${parts[1]}` : parts[0]
+  })()
+
   await admin
     .from('profiles')
-    .update({ full_name: full_name.trim(), phone: phone || null, role: role ?? 'worker' })
+    .update({
+      full_name: full_name.trim(),
+      phone: phone || null,
+      role: role ?? 'worker',
+      username: generatedUsername,
+    })
     .eq('id', authUser.user.id)
 
   if (group_ids?.length) {
