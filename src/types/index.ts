@@ -7,6 +7,7 @@ export interface Profile {
   phone: string | null
   role: Role
   active: boolean
+  avatar_url: string | null
   created_at: string
   updated_at: string
 }

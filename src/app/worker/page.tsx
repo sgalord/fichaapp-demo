@@ -57,18 +57,22 @@ export default function WorkerPage() {
   const [message, setMessage]             = useState<{ text: string; type: 'ok' | 'err' } | null>(null)
   const [dataLoading, setDataLoading]     = useState(true)
 
-  // Foto
+  // Foto de fichaje
   const photoInputRef                     = useRef<HTMLInputElement>(null)
   const [photoFile, setPhotoFile]         = useState<File | null>(null)
   const [photoPreview, setPhotoPreview]   = useState<string | null>(null)
   const [uploading, setUploading]         = useState(false)
+
+  // Avatar de perfil
+  const avatarInputRef                    = useRef<HTMLInputElement>(null)
+  const [uploadingAvatar, setUploadingAvatar] = useState(false)
 
   const loadData = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { router.push('/login'); return }
 
     const [{ data: prof }, { data: checkIns }] = await Promise.all([
-      supabase.from('profiles').select('id,full_name,role,active').eq('id', user.id).single(),
+      supabase.from('profiles').select('id,full_name,role,active,avatar_url').eq('id', user.id).single(),
       supabase.from('check_ins')
         .select('id,type,timestamp,distance_meters,within_radius,work_location_id,photo_url')
         .eq('worker_id', user.id)
@@ -119,6 +123,22 @@ export default function WorkerPage() {
       setGeoStatus('error')
       setMessage({ text: 'No se pudo obtener tu ubicación. Activa el GPS.', type: 'err' })
     }
+  }
+
+  async function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]; if (!file || !profile) return
+    e.target.value = ''; setUploadingAvatar(true)
+    try {
+      const blob = await compressImage(file)
+      const filename = `${profile.id}/avatar.jpg`
+      await supabase.storage.from('avatars').remove([filename])
+      const { error } = await supabase.storage.from('avatars').upload(filename, blob, { contentType: 'image/jpeg' })
+      if (!error) {
+        const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(filename)
+        await supabase.from('profiles').update({ avatar_url: `${publicUrl}?t=${Date.now()}` }).eq('id', profile.id)
+        await loadData()
+      }
+    } finally { setUploadingAvatar(false) }
   }
 
   function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -229,8 +249,27 @@ export default function WorkerPage() {
       <header className="bg-zinc-900 border-b border-zinc-800 px-4 pt-12 pb-5 safe-top sticky top-0 z-10">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center flex-shrink-0">
-              <Building2 size={15} className="text-zinc-950" strokeWidth={2} />
+            {/* Avatar con opción de cambio */}
+            <div className="relative flex-shrink-0">
+              <input ref={avatarInputRef} type="file" accept="image/*" className="hidden"
+                onChange={handleAvatarChange} id="worker-avatar" />
+              <label htmlFor="worker-avatar" className="cursor-pointer group relative block" title="Cambiar foto de perfil">
+                {profile?.avatar_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={profile.avatar_url} alt={profile.full_name}
+                    className="w-9 h-9 rounded-full object-cover border border-zinc-700" />
+                ) : (
+                  <div className="w-9 h-9 bg-zinc-800 border border-zinc-700 rounded-full flex items-center justify-center">
+                    {uploadingAvatar
+                      ? <Loader2 size={14} className="text-zinc-400 animate-spin" />
+                      : <Building2 size={14} className="text-zinc-400" strokeWidth={2} />
+                    }
+                  </div>
+                )}
+                <div className="absolute inset-0 bg-black/50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                  {uploadingAvatar ? <Loader2 size={11} className="text-white animate-spin" /> : <Camera size={11} className="text-white" />}
+                </div>
+              </label>
             </div>
             <div>
               <p className="text-zinc-500 text-xs">BUILT · Hola,</p>

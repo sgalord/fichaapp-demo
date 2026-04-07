@@ -10,6 +10,24 @@ async function requireAdmin(supabase: Awaited<ReturnType<typeof createClient>>) 
   return user
 }
 
+// GET — devuelve email del trabajador (requiere admin)
+export async function GET(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params
+  const supabase = await createClient()
+  const user = await requireAdmin(supabase)
+  if (!user) return NextResponse.json({ error: 'Acceso denegado' }, { status: 403 })
+
+  const admin = await createAdminClient()
+  const { data: authUser, error } = await admin.auth.admin.getUserById(id)
+  if (error || !authUser.user) return NextResponse.json({ error: 'Usuario no encontrado' }, { status: 404 })
+
+  return NextResponse.json({ email: authUser.user.email ?? '' })
+}
+
+// PUT — actualiza perfil, email, contraseña y grupos
 export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -20,10 +38,11 @@ export async function PUT(
   if (!user) return NextResponse.json({ error: 'Acceso denegado' }, { status: 403 })
 
   const body = await req.json()
-  const { full_name, phone, role, active, group_ids, password } = body
+  const { full_name, email, phone, role, active, group_ids, password } = body
 
   const admin = await createAdminClient()
 
+  // Actualizar perfil (tabla profiles)
   const profileUpdates: Record<string, unknown> = {}
   if (full_name !== undefined) profileUpdates.full_name = full_name
   if (phone     !== undefined) profileUpdates.phone     = phone || null
@@ -35,10 +54,17 @@ export async function PUT(
     if (error) return NextResponse.json({ error: 'Error al actualizar perfil' }, { status: 500 })
   }
 
-  if (password && password.length >= 8) {
-    await admin.auth.admin.updateUserById(id, { password })
+  // Actualizar auth (email y/o contraseña)
+  const authUpdates: Record<string, string> = {}
+  if (email    && email.trim())         authUpdates.email    = email.trim().toLowerCase()
+  if (password && password.length >= 8) authUpdates.password = password
+
+  if (Object.keys(authUpdates).length > 0) {
+    const { error } = await admin.auth.admin.updateUserById(id, authUpdates)
+    if (error) return NextResponse.json({ error: 'Error al actualizar credenciales' }, { status: 500 })
   }
 
+  // Actualizar grupos
   if (group_ids !== undefined) {
     await admin.from('user_groups').delete().eq('user_id', id)
     if (group_ids.length > 0) {

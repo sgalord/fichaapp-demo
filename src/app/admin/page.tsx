@@ -11,10 +11,10 @@ import {
 import Link from 'next/link'
 
 interface WorkerStatus {
-  profile: Pick<Profile, 'id' | 'full_name'>
+  profile: Pick<Profile, 'id' | 'full_name' | 'avatar_url'>
   lastIn:  CheckIn | null
   lastOut: CheckIn | null
-  status:  'in' | 'out' | 'absent'
+  status:  'in' | 'out' | 'absent' | 'rest'
 }
 
 interface Notification {
@@ -41,7 +41,7 @@ export default function AdminDashboard() {
 
     const { data: profiles } = await supabase
       .from('profiles')
-      .select('id, full_name')
+      .select('id, full_name, avatar_url')
       .eq('role', 'worker')
       .eq('active', true)
       .order('full_name')
@@ -52,8 +52,33 @@ export default function AdminDashboard() {
       .gte('timestamp', `${todayISO()}T00:00:00`)
       .order('timestamp', { ascending: false })
 
+    // Calcular qué trabajadores tienen obra asignada hoy (directo o por grupo)
+    const today = todayISO()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const sb = supabase as any
+    const [{ data: directLA }, { data: groupLA }] = await Promise.all([
+      sb.from('location_assignments')
+        .select('worker_id, work_locations!inner(date)')
+        .eq('work_locations.date', today)
+        .not('worker_id', 'is', null),
+      sb.from('location_assignments')
+        .select('group_id, work_locations!inner(date)')
+        .eq('work_locations.date', today)
+        .not('group_id', 'is', null),
+    ])
+    const groupIds = (groupLA ?? []).map((la: Record<string, unknown>) => la.group_id as string).filter(Boolean)
+    let groupWorkerIds: string[] = []
+    if (groupIds.length > 0) {
+      const { data: ug } = await supabase.from('user_groups').select('user_id').in('group_id', groupIds)
+      groupWorkerIds = (ug ?? []).map((u: { user_id: string }) => u.user_id)
+    }
+    const withLocationToday = new Set([
+      ...(directLA ?? []).map((la: Record<string, unknown>) => la.worker_id as string).filter(Boolean),
+      ...groupWorkerIds,
+    ])
+
     const statusMap: Record<string, WorkerStatus> = {}
-    for (const p of (profiles ?? []) as Pick<Profile, 'id' | 'full_name'>[]) {
+    for (const p of (profiles ?? []) as Pick<Profile, 'id' | 'full_name' | 'avatar_url'>[]) {
       statusMap[p.id] = { profile: p, lastIn: null, lastOut: null, status: 'absent' }
     }
     for (const ci of ((todayCheckIns ?? []) as CheckIn[])) {
@@ -63,8 +88,10 @@ export default function AdminDashboard() {
       if (ci.type === 'out' && !ws.lastOut) ws.lastOut = ci
     }
     for (const ws of Object.values(statusMap)) {
-      if (ws.lastIn && ws.lastOut) ws.status = 'out'
-      else if (ws.lastIn)         ws.status = 'in'
+      if (ws.lastIn && ws.lastOut)                ws.status = 'out'
+      else if (ws.lastIn)                         ws.status = 'in'
+      else if (!withLocationToday.has(ws.profile.id)) ws.status = 'rest'
+      // else: tiene obra hoy pero no ha fichado → status permanece 'absent'
     }
 
     setSummary(sum?.[0] ?? null)
@@ -109,6 +136,7 @@ export default function AdminDashboard() {
   const inWorkers     = workers.filter(w => w.status === 'in')
   const outWorkers    = workers.filter(w => w.status === 'out')
   const absentWorkers = workers.filter(w => w.status === 'absent')
+  const restWorkers   = workers.filter(w => w.status === 'rest')
 
   const unreadCount = notifications.length
 
@@ -181,31 +209,21 @@ export default function AdminDashboard() {
 
       {/* ── KPI Cards ── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <KpiCard
-          label="Total trabajadores"
-          value={summary?.total_workers ?? workers.length}
-          icon={Users}
-          color="zinc"
-        />
-        <KpiCard
-          label="En obra ahora"
-          value={inWorkers.length}
-          icon={CheckCircle2}
-          color="emerald"
-        />
-        <KpiCard
-          label="Han salido"
-          value={outWorkers.length}
-          icon={TrendingUp}
-          color="blue"
-        />
-        <KpiCard
-          label="Sin fichar"
-          value={absentWorkers.length}
-          icon={XCircle}
-          color="red"
-        />
+        <KpiCard label="Total trabajadores" value={summary?.total_workers ?? workers.length} icon={Users} color="zinc" />
+        <KpiCard label="En obra ahora"      value={inWorkers.length}     icon={CheckCircle2} color="emerald" />
+        <KpiCard label="Han salido"         value={outWorkers.length}    icon={TrendingUp}   color="blue" />
+        <KpiCard label="Sin fichar"         value={absentWorkers.length} icon={XCircle}      color="red" />
       </div>
+      {/* Chip de descanso — sin obra asignada hoy */}
+      {restWorkers.length > 0 && (
+        <div className="flex items-center gap-2 text-sm text-zinc-500">
+          <span className="badge-gray">Descanso hoy: {restWorkers.length}</span>
+          <span className="text-xs truncate hidden sm:block">
+            {restWorkers.slice(0, 4).map(w => w.profile.full_name.split(' ')[0]).join(', ')}
+            {restWorkers.length > 4 ? ` +${restWorkers.length - 4}` : ''}
+          </span>
+        </div>
+      )}
 
       {loading && workers.length === 0 && (
         <div className="flex justify-center py-10">
@@ -222,14 +240,9 @@ export default function AdminDashboard() {
           </p>
           <div className="grid gap-2 sm:grid-cols-2">
             {inWorkers.map(({ profile, lastIn }) => (
-              <WorkerRow
-                key={profile.id}
-                profile={profile}
-                statusLabel="Entrada"
-                badgeClass="badge-green"
-                time={lastIn?.timestamp}
-                distance={lastIn?.distance_meters}
-                withinRadius={lastIn?.within_radius ?? true}
+              <WorkerRow key={profile.id} profile={profile}
+                statusLabel="Entrada" badgeClass="badge-green"
+                time={lastIn?.timestamp} distance={lastIn?.distance_meters} withinRadius={lastIn?.within_radius ?? true}
               />
             ))}
           </div>
@@ -242,14 +255,9 @@ export default function AdminDashboard() {
           <p className="section-title">Han salido ({outWorkers.length})</p>
           <div className="grid gap-2 sm:grid-cols-2">
             {outWorkers.map(({ profile, lastOut }) => (
-              <WorkerRow
-                key={profile.id}
-                profile={profile}
-                statusLabel="Salida"
-                badgeClass="badge-gray"
-                time={lastOut?.timestamp}
-                distance={lastOut?.distance_meters}
-                withinRadius={lastOut?.within_radius ?? true}
+              <WorkerRow key={profile.id} profile={profile}
+                statusLabel="Salida" badgeClass="badge-gray"
+                time={lastOut?.timestamp} distance={lastOut?.distance_meters} withinRadius={lastOut?.within_radius ?? true}
               />
             ))}
           </div>
@@ -266,9 +274,25 @@ export default function AdminDashboard() {
           <div className="grid gap-2 sm:grid-cols-2">
             {absentWorkers.map(({ profile }) => (
               <div key={profile.id} className="card flex items-center gap-3">
-                <Avatar name={profile.full_name} />
+                <Avatar name={profile.full_name} avatarUrl={profile.avatar_url} />
                 <span className="text-sm font-medium text-zinc-300 flex-1 truncate">{profile.full_name}</span>
                 <span className="badge-red">Ausente</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* ── Descanso ── */}
+      {restWorkers.length > 0 && (
+        <section className="space-y-2">
+          <p className="section-title text-zinc-500">Descanso ({restWorkers.length})</p>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {restWorkers.map(({ profile }) => (
+              <div key={profile.id} className="card flex items-center gap-3 opacity-60">
+                <Avatar name={profile.full_name} avatarUrl={profile.avatar_url} />
+                <span className="text-sm font-medium text-zinc-400 flex-1 truncate">{profile.full_name}</span>
+                <span className="badge-gray">Descanso</span>
               </div>
             ))}
           </div>
@@ -304,7 +328,11 @@ export default function AdminDashboard() {
 
 // ── Sub-components ──
 
-function Avatar({ name }: { name: string }) {
+function Avatar({ name, avatarUrl }: { name: string; avatarUrl?: string | null }) {
+  if (avatarUrl) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={avatarUrl} alt={name} className="w-9 h-9 rounded-full object-cover flex-shrink-0" />
+  }
   const colors = ['bg-violet-500', 'bg-blue-500', 'bg-emerald-500', 'bg-amber-500', 'bg-pink-500', 'bg-cyan-500']
   let hash = 0
   for (const ch of name) hash = (hash * 31 + ch.charCodeAt(0)) & 0xffffffff
@@ -342,7 +370,7 @@ function KpiCard({ label, value, icon: Icon, color }: {
 function WorkerRow({
   profile, statusLabel, badgeClass, time, distance, withinRadius,
 }: {
-  profile: Pick<Profile, 'id' | 'full_name'>
+  profile: Pick<Profile, 'id' | 'full_name' | 'avatar_url'>
   statusLabel: string
   badgeClass: string
   time?: string
@@ -351,9 +379,14 @@ function WorkerRow({
 }) {
   return (
     <div className="card flex items-center gap-3">
-      <div className={`${avatarColor(profile.full_name)} w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0`}>
-        {initials(profile.full_name)}
-      </div>
+      {profile.avatar_url ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={profile.avatar_url} alt={profile.full_name} className="w-9 h-9 rounded-full object-cover flex-shrink-0" />
+      ) : (
+        <div className={`${avatarColor(profile.full_name)} w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0`}>
+          {initials(profile.full_name)}
+        </div>
+      )}
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-zinc-200 truncate">{profile.full_name}</p>
         <div className="flex items-center gap-1.5 mt-0.5">
