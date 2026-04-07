@@ -8,7 +8,10 @@
       "WebFetch(domain:www.bytebase.com)",
       "WebFetch(domain:chat2db.ai)",
       "Bash(npm install:*)",
-      "Bash(npm run:*)"
+      "Bash(npm run:*)",
+      "Bash(gh --version)",
+      "Bash(git -C \"C:/Users/Usuario/Desktop/APP PARA FICHAR\" log --oneline -3)",
+      "Bash(git -C \"C:/Users/Usuario/Desktop/APP PARA FICHAR\" status)"
     ]
   }
 }
