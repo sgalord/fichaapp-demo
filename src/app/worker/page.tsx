@@ -11,7 +11,7 @@ import type { Profile, WorkLocation, CheckIn } from '@/types'
 import {
   MapPin, Clock, CheckCircle2, XCircle, LogOut,
   Navigation, AlertTriangle, ChevronRight, Loader2, RefreshCw,
-  Building2, Camera, X, Image,
+  Building2, Camera, X, Image, UserCircle,
 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -131,8 +131,9 @@ export default function WorkerPage() {
     try {
       const blob = await compressImage(file)
       const filename = `${profile.id}/avatar.jpg`
-      await supabase.storage.from('avatars').remove([filename])
-      const { error } = await supabase.storage.from('avatars').upload(filename, blob, { contentType: 'image/jpeg' })
+      // upsert:true sobreescribe si ya existe (evita error "already exists")
+      const { error } = await supabase.storage.from('avatars')
+        .upload(filename, blob, { contentType: 'image/jpeg', upsert: true })
       if (!error) {
         const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(filename)
         await supabase.from('profiles').update({ avatar_url: `${publicUrl}?t=${Date.now()}` }).eq('id', profile.id)
@@ -527,14 +528,18 @@ export default function WorkerPage() {
           )}
         </div>
 
-        {/* ── Historial ── */}
-        <Link
-          href="/worker/history"
-          className="card-hover flex items-center justify-between"
-        >
+        {/* ── Historial + Perfil ── */}
+        <Link href="/worker/history" className="card-hover flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <Clock size={16} className="text-zinc-500" />
             <span className="text-sm font-medium text-zinc-400">Ver historial completo</span>
+          </div>
+          <ChevronRight size={16} className="text-zinc-600" />
+        </Link>
+        <Link href="/worker/profile" className="card-hover flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <UserCircle size={16} className="text-zinc-500" />
+            <span className="text-sm font-medium text-zinc-400">Mi perfil</span>
           </div>
           <ChevronRight size={16} className="text-zinc-600" />
         </Link>

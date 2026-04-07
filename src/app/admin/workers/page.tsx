@@ -118,8 +118,8 @@ export default function WorkersPage() {
     try {
       const blob = await compressAvatar(file)
       const filename = `${workerId}/avatar.jpg`
-      await supabase.storage.from('avatars').remove([filename])
-      const { error } = await supabase.storage.from('avatars').upload(filename, blob, { contentType: 'image/jpeg' })
+      const { error } = await supabase.storage.from('avatars')
+        .upload(filename, blob, { contentType: 'image/jpeg', upsert: true })
       if (!error) {
         const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(filename)
         await supabase.from('profiles').update({ avatar_url: `${publicUrl}?t=${Date.now()}` }).eq('id', workerId)

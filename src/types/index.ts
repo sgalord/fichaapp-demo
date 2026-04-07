@@ -8,6 +8,9 @@ export interface Profile {
   role: Role
   active: boolean
   avatar_url: string | null
+  birthday: string | null   // ISO date YYYY-MM-DD
+  dni: string | null
+  specialty: string | null
   created_at: string
   updated_at: string
 }
