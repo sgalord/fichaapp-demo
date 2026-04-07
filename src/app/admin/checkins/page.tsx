@@ -6,13 +6,14 @@ import { formatDateTime, formatDate, distanceLabel, todayISO, initials, avatarCo
 import type { CheckIn, Profile, WorkLocation } from '@/types'
 import {
   Search, Calendar, Edit2, Loader2, X,
-  CheckCircle2, XCircle, AlertTriangle, Clock, Download,
+  CheckCircle2, XCircle, AlertTriangle, Clock, Download, Camera,
 } from 'lucide-react'
 import * as XLSX from 'xlsx'
 
 type CheckInRow = Omit<CheckIn, 'worker' | 'work_location'> & {
   worker: Pick<Profile, 'id' | 'full_name'>
   work_location: Pick<WorkLocation, 'id' | 'name'> | null
+  photo_url?: string | null
 }
 
 const PAGE_SIZE = 20
@@ -38,7 +39,7 @@ export default function CheckinsPage() {
       .from('check_ins')
       .select(`
         id, worker_id, work_location_id, type, latitude, longitude,
-        distance_meters, within_radius, notes, manually_modified, timestamp,
+        distance_meters, within_radius, notes, manually_modified, timestamp, photo_url,
         worker:profiles!worker_id(id, full_name),
         work_location:work_locations(id, name)
       `)
@@ -243,6 +244,22 @@ export default function CheckinsPage() {
                     <p className="text-xs text-amber-400/80 mt-1.5 bg-amber-500/10 rounded-lg px-2.5 py-1.5">
                       Nota: {ci.notes}
                     </p>
+                  )}
+                  {ci.photo_url && (
+                    <a
+                      href={ci.photo_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-1.5 block rounded-xl overflow-hidden border border-zinc-700 hover:border-zinc-500 transition-colors"
+                      title="Ver foto completa"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={ci.photo_url}
+                        alt="Foto del fichaje"
+                        className="w-full h-28 object-cover"
+                      />
+                    </a>
                   )}
                 </div>
                 <div className="text-right flex-shrink-0">

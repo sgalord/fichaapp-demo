@@ -4,6 +4,7 @@ import { useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Building2, Eye, EyeOff, Loader2, AlertCircle } from 'lucide-react'
+import Link from 'next/link'
 
 export default function LoginPage() {
   return (
@@ -141,6 +142,15 @@ function LoginForm() {
               }
             </button>
           </form>
+
+          <div className="mt-4 text-center">
+            <Link
+              href="/forgot-password"
+              className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+            >
+              ¿Olvidaste tu contraseña?
+            </Link>
+          </div>
         </div>
 
         <p className="text-center text-xs text-zinc-600 mt-6">

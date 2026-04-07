@@ -1,21 +1,46 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import {
   haversineDistance, formatTime, formatDate, distanceLabel,
-  todayISO, mapsUrl, initials, avatarColor,
+  todayISO, mapsUrl, avatarColor, initials,
 } from '@/lib/utils'
 import type { Profile, WorkLocation, CheckIn } from '@/types'
 import {
   MapPin, Clock, CheckCircle2, XCircle, LogOut,
   Navigation, AlertTriangle, ChevronRight, Loader2, RefreshCw,
-  Building2,
+  Building2, Camera, X, Image,
 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 
 type GeoStatus = 'idle' | 'loading' | 'ok' | 'error'
+
+// Comprime imagen a max 1280px y calidad 0.82 antes de subir
+async function compressImage(file: File): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const img = new window.Image()
+    const url = URL.createObjectURL(file)
+    img.onload = () => {
+      const MAX = 1280
+      const ratio = Math.min(1, MAX / Math.max(img.width, img.height))
+      const canvas = document.createElement('canvas')
+      canvas.width  = Math.round(img.width  * ratio)
+      canvas.height = Math.round(img.height * ratio)
+      const ctx = canvas.getContext('2d')!
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+      URL.revokeObjectURL(url)
+      canvas.toBlob(
+        (blob) => (blob ? resolve(blob) : reject(new Error('Canvas toBlob failed'))),
+        'image/jpeg',
+        0.82,
+      )
+    }
+    img.onerror = reject
+    img.src = url
+  })
+}
 
 export default function WorkerPage() {
   const supabase = createClient()
@@ -31,6 +56,12 @@ export default function WorkerPage() {
   const [message, setMessage]             = useState<{ text: string; type: 'ok' | 'err' } | null>(null)
   const [dataLoading, setDataLoading]     = useState(true)
 
+  // Foto
+  const photoInputRef                     = useRef<HTMLInputElement>(null)
+  const [photoFile, setPhotoFile]         = useState<File | null>(null)
+  const [photoPreview, setPhotoPreview]   = useState<string | null>(null)
+  const [uploading, setUploading]         = useState(false)
+
   const loadData = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { router.push('/login'); return }
@@ -38,7 +69,7 @@ export default function WorkerPage() {
     const [{ data: prof }, { data: checkIns }] = await Promise.all([
       supabase.from('profiles').select('id,full_name,role,active').eq('id', user.id).single(),
       supabase.from('check_ins')
-        .select('id,type,timestamp,distance_meters,within_radius,work_location_id')
+        .select('id,type,timestamp,distance_meters,within_radius,work_location_id,photo_url')
         .eq('worker_id', user.id)
         .gte('timestamp', `${todayISO()}T00:00:00`)
         .order('timestamp', { ascending: false })
@@ -57,6 +88,11 @@ export default function WorkerPage() {
   }, [supabase, router])
 
   useEffect(() => { loadData() }, [loadData])
+
+  // Limpiar object URL al desmontar
+  useEffect(() => {
+    return () => { if (photoPreview) URL.revokeObjectURL(photoPreview) }
+  }, [photoPreview])
 
   function getPosition(): Promise<GeolocationPosition> {
     return new Promise((resolve, reject) => {
@@ -84,13 +120,57 @@ export default function WorkerPage() {
     }
   }
 
+  function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    // Limpiar previa anterior
+    if (photoPreview) URL.revokeObjectURL(photoPreview)
+    setPhotoFile(file)
+    setPhotoPreview(URL.createObjectURL(file))
+    // Reset el input para poder volver a seleccionar
+    e.target.value = ''
+  }
+
+  function removePhoto() {
+    if (photoPreview) URL.revokeObjectURL(photoPreview)
+    setPhotoFile(null)
+    setPhotoPreview(null)
+  }
+
   const nextType: 'in' | 'out' = todayCheckIns[0]?.type === 'in' ? 'out' : 'in'
   const withinRadius = distance !== null && location !== null && distance <= location.radius
 
   async function handleCheckIn() {
-    if (!userCoords || !profile) return
+    if (!userCoords || !profile || !photoFile) return
     setChecking(true)
+    setUploading(true)
     setMessage(null)
+
+    let photo_url: string | null = null
+
+    // 1. Subir foto a Supabase Storage
+    try {
+      const compressed = await compressImage(photoFile)
+      const filename   = `${profile.id}/${Date.now()}.jpg`
+      const { error: uploadError } = await supabase.storage
+        .from('checkin-photos')
+        .upload(filename, compressed, { contentType: 'image/jpeg' })
+
+      if (!uploadError) {
+        const { data: { publicUrl } } = supabase.storage
+          .from('checkin-photos')
+          .getPublicUrl(filename)
+        photo_url = publicUrl
+      } else {
+        console.warn('Photo upload error:', uploadError.message)
+      }
+    } catch (err) {
+      console.warn('Error compressing/uploading photo:', err)
+    }
+
+    setUploading(false)
+
+    // 2. Registrar fichaje
     try {
       const res = await fetch('/api/checkin', {
         method: 'POST',
@@ -100,6 +180,7 @@ export default function WorkerPage() {
           latitude: userCoords.lat,
           longitude: userCoords.lng,
           work_location_id: location?.id ?? null,
+          photo_url,
         }),
       })
       const json = await res.json()
@@ -108,6 +189,11 @@ export default function WorkerPage() {
         text: nextType === 'in' ? '¡Entrada registrada!' : '¡Salida registrada!',
         type: 'ok',
       })
+      // Reset foto para siguiente fichaje
+      removePhoto()
+      setGeoStatus('idle')
+      setUserCoords(null)
+      setDistance(null)
       await loadData()
     } catch (e: unknown) {
       setMessage({ text: e instanceof Error ? e.message : 'Error inesperado', type: 'err' })
@@ -129,7 +215,7 @@ export default function WorkerPage() {
     )
   }
 
-  const color = avatarColor(profile?.full_name ?? '')
+  const canCheckIn = geoStatus === 'ok' && !!photoFile && !checking
 
   return (
     <div className="min-h-screen bg-zinc-950 flex flex-col max-w-md mx-auto">
@@ -201,32 +287,89 @@ export default function WorkerPage() {
           )}
         </div>
 
-        {/* ── GPS + Fichaje ── */}
+        {/* ── GPS + Foto + Fichaje ── */}
         {location ? (
           <div className="space-y-3">
-            {/* Botón GPS */}
-            <button
-              onClick={locateMe}
-              disabled={geoStatus === 'loading'}
-              className={`w-full flex items-center justify-center gap-3 rounded-xl px-5 py-4 text-sm font-medium transition-all border ${
-                geoStatus === 'ok'
-                  ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
-                  : 'bg-zinc-800 border-zinc-700 text-zinc-300 hover:border-zinc-600'
-              }`}
-            >
-              {geoStatus === 'loading'
-                ? <Loader2 size={18} className="animate-spin" />
-                : geoStatus === 'ok'
-                ? <Navigation size={18} />
-                : <Navigation size={18} />
-              }
-              {geoStatus === 'ok'
-                ? `Ubicación obtenida · ${distanceLabel(distance!)}`
-                : geoStatus === 'loading'
-                ? 'Obteniendo ubicación...'
-                : 'Obtener mi ubicación GPS'
-              }
-            </button>
+
+            {/* Paso 1: GPS */}
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-zinc-500 px-1">1 · Ubicación GPS</p>
+              <button
+                onClick={locateMe}
+                disabled={geoStatus === 'loading'}
+                className={`w-full flex items-center justify-center gap-3 rounded-xl px-5 py-4 text-sm font-medium transition-all border ${
+                  geoStatus === 'ok'
+                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                    : 'bg-zinc-800 border-zinc-700 text-zinc-300 hover:border-zinc-600'
+                }`}
+              >
+                {geoStatus === 'loading'
+                  ? <Loader2 size={18} className="animate-spin" />
+                  : <Navigation size={18} />
+                }
+                {geoStatus === 'ok'
+                  ? `GPS obtenido · ${distanceLabel(distance!)}`
+                  : geoStatus === 'loading'
+                  ? 'Obteniendo ubicación...'
+                  : 'Obtener mi ubicación GPS'
+                }
+              </button>
+            </div>
+
+            {/* Paso 2: Foto (aparece al obtener GPS) */}
+            {geoStatus === 'ok' && (
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-zinc-500 px-1">2 · Fotografía</p>
+
+                {/* Input de cámara oculto */}
+                <input
+                  ref={photoInputRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  className="hidden"
+                  onChange={handlePhotoChange}
+                />
+
+                {/* Previa de la foto */}
+                {photoPreview ? (
+                  <div className="relative rounded-xl overflow-hidden border border-zinc-700">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={photoPreview}
+                      alt="Foto del fichaje"
+                      className="w-full h-40 object-cover"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+                    <div className="absolute bottom-2 left-3 flex items-center gap-1.5 text-xs text-white/80">
+                      <CheckCircle2 size={13} className="text-emerald-400" />
+                      Foto lista
+                    </div>
+                    <button
+                      onClick={removePhoto}
+                      className="absolute top-2 right-2 bg-zinc-900/80 backdrop-blur-sm rounded-full p-1.5 text-zinc-300 hover:text-white transition-colors"
+                    >
+                      <X size={14} />
+                    </button>
+                    {/* Botón para repetir foto */}
+                    <button
+                      onClick={() => photoInputRef.current?.click()}
+                      className="absolute bottom-2 right-3 bg-zinc-900/80 backdrop-blur-sm rounded-lg px-2.5 py-1 text-xs text-zinc-300 hover:text-white flex items-center gap-1 transition-colors"
+                    >
+                      <Camera size={11} /> Repetir
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => photoInputRef.current?.click()}
+                    className="w-full flex items-center justify-center gap-3 rounded-xl px-5 py-4 text-sm font-medium bg-zinc-800 border border-zinc-700 text-zinc-300 hover:border-zinc-600 transition-all"
+                  >
+                    <Camera size={18} />
+                    Tomar fotografía (obligatorio)
+                  </button>
+                )}
+              </div>
+            )}
 
             {/* Aviso fuera de radio */}
             {geoStatus === 'ok' && !withinRadius && (
@@ -239,24 +382,41 @@ export default function WorkerPage() {
               </div>
             )}
 
-            {/* Botón fichar */}
-            <button
-              onClick={handleCheckIn}
-              disabled={geoStatus !== 'ok' || checking}
-              className={`w-full flex items-center justify-center gap-3 rounded-xl px-6 py-5 text-base font-bold transition-all active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed ${
-                nextType === 'in'
-                  ? 'bg-emerald-500 text-white hover:bg-emerald-400'
-                  : 'bg-red-500 text-white hover:bg-red-400'
-              }`}
-            >
-              {checking
-                ? <Loader2 size={22} className="animate-spin" />
-                : nextType === 'in'
-                ? <CheckCircle2 size={22} />
-                : <XCircle size={22} />
-              }
-              {checking ? 'Registrando...' : nextType === 'in' ? 'Registrar Entrada' : 'Registrar Salida'}
-            </button>
+            {/* Paso 3: Botón fichar */}
+            <div className="space-y-1">
+              {geoStatus === 'ok' && (
+                <p className="text-xs font-medium text-zinc-500 px-1">3 · Fichar</p>
+              )}
+              <button
+                onClick={handleCheckIn}
+                disabled={!canCheckIn}
+                className={`w-full flex items-center justify-center gap-3 rounded-xl px-6 py-5 text-base font-bold transition-all active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed ${
+                  nextType === 'in'
+                    ? 'bg-emerald-500 text-white hover:bg-emerald-400'
+                    : 'bg-red-500 text-white hover:bg-red-400'
+                }`}
+              >
+                {checking
+                  ? <>
+                      <Loader2 size={22} className="animate-spin" />
+                      {uploading ? 'Subiendo foto...' : 'Registrando...'}
+                    </>
+                  : nextType === 'in'
+                  ? <><CheckCircle2 size={22} />Registrar Entrada</>
+                  : <><XCircle size={22} />Registrar Salida</>
+                }
+              </button>
+              {geoStatus !== 'ok' && (
+                <p className="text-xs text-zinc-600 text-center pt-1">
+                  Primero obtén tu ubicación GPS
+                </p>
+              )}
+              {geoStatus === 'ok' && !photoFile && (
+                <p className="text-xs text-zinc-600 text-center pt-1">
+                  Falta la fotografía del paso 2
+                </p>
+              )}
+            </div>
           </div>
         ) : (
           <div className="card border-dashed flex items-center gap-3">
@@ -299,6 +459,17 @@ export default function WorkerPage() {
                       {ci.type === 'in' ? 'Entrada' : 'Salida'}
                     </span>
                     {!ci.within_radius && <span className="badge-orange">Fuera radio</span>}
+                    {ci.photo_url && (
+                      <a
+                        href={ci.photo_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center text-zinc-500 hover:text-zinc-300 transition-colors"
+                        title="Ver foto"
+                      >
+                        <Image size={13} />
+                      </a>
+                    )}
                   </div>
                   <div className="text-right">
                     <span className="text-sm font-semibold text-zinc-200">{formatTime(ci.timestamp)}</span>

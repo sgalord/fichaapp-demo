@@ -57,6 +57,7 @@ export interface CheckIn {
   manually_modified: boolean
   modified_by: string | null
   modified_at: string | null
+  photo_url: string | null
   timestamp: string
   created_at: string
   // Joins

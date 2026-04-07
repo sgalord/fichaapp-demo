@@ -33,7 +33,13 @@ export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   // Rutas públicas — siempre accesibles
-  if (pathname.startsWith('/login') || pathname.startsWith('/api/')) {
+  if (
+    pathname.startsWith('/login') ||
+    pathname.startsWith('/api/') ||
+    pathname.startsWith('/forgot-password') ||
+    pathname.startsWith('/reset-password') ||
+    pathname.startsWith('/auth/')
+  ) {
     return supabaseResponse
   }
 
