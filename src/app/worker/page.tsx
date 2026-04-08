@@ -87,8 +87,6 @@ export default function WorkerPage() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { router.push('/login'); return }
 
-    const sb = supabase as unknown as typeof supabase
-
     const [{ data: prof }, { data: checkIns }] = await Promise.all([
       supabase.from('profiles').select('id,full_name,role,active,avatar_url,username').eq('id', user.id).single(),
       supabase.from('check_ins')
@@ -102,30 +100,19 @@ export default function WorkerPage() {
     setProfile(prof as Profile)
     setTodayCheckIns((checkIns ?? []) as CheckIn[])
 
-    // Obtener obra de hoy y mañana desde obra_assignments
+    // Obtener obra de hoy y mañana via API (bypasses RLS issues)
     const today    = todayISO()
     const tomorrow = tomorrowISO()
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: todayAssigns } = await (sb as any)
-      .from('obra_assignments')
-      .select('obra:obras(id,name,address,latitude,longitude,radius)')
-      .eq('worker_id', user.id)
-      .eq('date', today)
-      .limit(1)
+    const [todayRes, tomorrowRes] = await Promise.all([
+      fetch(`/api/obra-assignments?date=${today}`),
+      fetch(`/api/obra-assignments?date=${tomorrow}`),
+    ])
+    const todayData    = todayRes.ok    ? (await todayRes.json()).data    : []
+    const tomorrowData = tomorrowRes.ok ? (await tomorrowRes.json()).data : []
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: tomorrowAssigns } = await (sb as any)
-      .from('obra_assignments')
-      .select('obra:obras(id,name,address,latitude,longitude,radius)')
-      .eq('worker_id', user.id)
-      .eq('date', tomorrow)
-      .limit(1)
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    setTodayObra((todayAssigns?.[0]?.obra as any) ?? null)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    setTomorrowObra((tomorrowAssigns?.[0]?.obra as any) ?? null)
+    setTodayObra(todayData?.[0]?.obra ?? null)
+    setTomorrowObra(tomorrowData?.[0]?.obra ?? null)
 
     setDataLoading(false)
   }, [supabase, router])

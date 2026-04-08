@@ -1,31 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 
-async function requireAdmin() {
+async function getAuthUser() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return null
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  if (!['admin', 'superadmin'].includes(profile?.role ?? '')) return null
-  return user
+  return { user, role: profile?.role ?? 'worker' }
 }
 
 export async function GET(req: NextRequest) {
-  const user = await requireAdmin()
-  if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+  const auth = await getAuthUser()
+  if (!auth) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
+  const isAdmin = ['admin', 'superadmin'].includes(auth.role)
   const { searchParams } = new URL(req.url)
   const date     = searchParams.get('date')
   const dateFrom = searchParams.get('date_from')
   const dateTo   = searchParams.get('date_to')
-  const workerId = searchParams.get('worker_id')
+  // Workers can only fetch their own assignments
+  const workerId = isAdmin ? searchParams.get('worker_id') : auth.user.id
   const obraId   = searchParams.get('obra_id')
 
-  const supabase = await createClient()
+  const admin = await createAdminClient()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let q: any = supabase
+  let q: any = admin
     .from('obra_assignments')
-    .select('*, obra:obras(id,name,address), worker:profiles(id,full_name,avatar_url)')
+    .select('*, obra:obras(id,name,address,latitude,longitude,radius), worker:profiles(id,full_name,avatar_url)')
 
   if (date)     q = q.eq('date', date)
   if (dateFrom) q = q.gte('date', dateFrom)
@@ -41,8 +42,11 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const user = await requireAdmin()
-  if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+  const auth = await getAuthUser()
+  if (!auth || !['admin', 'superadmin'].includes(auth.role)) {
+    return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+  }
+  const user = auth.user
 
   const { searchParams } = new URL(req.url)
   const force = searchParams.get('force') === '1'

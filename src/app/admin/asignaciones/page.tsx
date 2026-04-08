@@ -1,10 +1,11 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import type { Obra, Profile, ObraAssignment } from '@/types'
 import {
   Plus, ChevronLeft, ChevronRight, Loader2, X, AlertTriangle,
-  HardHat, User, Trash2, CalendarDays, Users,
+  HardHat, User, Trash2, CalendarDays, Users, LayoutGrid, List,
+  ChevronDown, GripVertical,
 } from 'lucide-react'
 import { initials, avatarColor } from '@/lib/utils'
 
@@ -23,29 +24,154 @@ function formatShort(iso: string) {
   const d = new Date(iso + 'T00:00:00')
   return d.toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' })
 }
+function formatDayShort(iso: string) {
+  const d = new Date(iso + 'T00:00:00')
+  return d.toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric' })
+}
 
 type AssignWithJoins = ObraAssignment & {
   obra?: { id: string; name: string; address: string | null }
   worker?: { id: string; full_name: string; avatar_url?: string | null }
 }
 
-export default function AsignacionesPage() {
-  const [weekDate, setWeekDate]     = useState(() => weekStart(new Date()))
-  const [obras, setObras]           = useState<Obra[]>([])
-  const [workers, setWorkers]       = useState<Profile[]>([])
-  const [assignments, setAssignments] = useState<AssignWithJoins[]>([])
-  const [loading, setLoading]       = useState(true)
-  const [showModal, setShowModal]   = useState(false)
-  const [saving, setSaving]         = useState(false)
-  const [conflict, setConflict]     = useState<string | null>(null)
-  const [deleting, setDeleting]     = useState<string | null>(null)
+// ── Multi-select worker dropdown ─────────────────────────────────────────────
+function WorkerMultiSelect({
+  workers,
+  selectedIds,
+  onChange,
+}: {
+  workers: Profile[]
+  selectedIds: string[]
+  onChange: (ids: string[]) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
 
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  function toggle(id: string) {
+    onChange(selectedIds.includes(id) ? selectedIds.filter(x => x !== id) : [...selectedIds, id])
+  }
+
+  const label = selectedIds.length === 0
+    ? 'Seleccionar trabajadores...'
+    : selectedIds.length === 1
+      ? workers.find(w => w.id === selectedIds[0])?.full_name ?? '1 trabajador'
+      : `${selectedIds.length} trabajadores seleccionados`
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        className="input w-full flex items-center justify-between gap-2 text-left"
+      >
+        <span className={selectedIds.length === 0 ? 'text-zinc-500' : 'text-zinc-200'}>{label}</span>
+        <ChevronDown size={14} className={`flex-shrink-0 text-zinc-500 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+
+      {open && (
+        <div className="absolute top-full left-0 right-0 mt-1 bg-zinc-800 border border-zinc-700 rounded-xl shadow-2xl z-20 max-h-52 overflow-y-auto">
+          {workers.map(w => (
+            <label
+              key={w.id}
+              className="flex items-center gap-3 px-3 py-2.5 hover:bg-zinc-700 cursor-pointer transition-colors first:rounded-t-xl last:rounded-b-xl"
+            >
+              <input
+                type="checkbox"
+                checked={selectedIds.includes(w.id)}
+                onChange={() => toggle(w.id)}
+                className="accent-white w-3.5 h-3.5 flex-shrink-0"
+              />
+              <div className={`${avatarColor(w.full_name)} w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0`}>
+                {initials(w.full_name)}
+              </div>
+              <span className="text-sm text-zinc-200 truncate">{w.full_name}</span>
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Worker chip (used in board view) ─────────────────────────────────────────
+function WorkerChip({
+  worker,
+  assignmentId,
+  obraId,
+  onDelete,
+  onDragStart,
+  isDragging,
+}: {
+  worker: Profile
+  assignmentId: string | null
+  obraId: string | null
+  onDelete?: () => void
+  onDragStart: (workerId: string, workerName: string, fromObraId: string | null, assignmentId: string | null) => void
+  isDragging?: boolean
+}) {
+  return (
+    <div
+      draggable
+      onDragStart={() => onDragStart(worker.id, worker.full_name, obraId, assignmentId)}
+      className={`flex items-center gap-1.5 bg-zinc-700/70 border border-zinc-600/50 rounded-lg px-2 py-1.5 cursor-grab active:cursor-grabbing select-none transition-opacity ${isDragging ? 'opacity-40' : 'hover:bg-zinc-600/70'}`}
+    >
+      <GripVertical size={10} className="text-zinc-500 flex-shrink-0" />
+      <div className={`${avatarColor(worker.full_name)} w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0`}>
+        {initials(worker.full_name)}
+      </div>
+      <span className="text-xs text-zinc-200 leading-tight">{worker.full_name.split(' ')[0]} {worker.full_name.split(' ')[1] ?? ''}</span>
+      {onDelete && (
+        <button
+          onClick={e => { e.stopPropagation(); onDelete() }}
+          className="ml-0.5 text-zinc-500 hover:text-red-400 transition-colors flex-shrink-0"
+        >
+          <X size={11} />
+        </button>
+      )}
+    </div>
+  )
+}
+
+// ── Main page ─────────────────────────────────────────────────────────────────
+export default function AsignacionesPage() {
+  const [weekDate, setWeekDate]       = useState(() => weekStart(new Date()))
+  const [obras, setObras]             = useState<Obra[]>([])
+  const [workers, setWorkers]         = useState<Profile[]>([])
+  const [assignments, setAssignments] = useState<AssignWithJoins[]>([])
+  const [loading, setLoading]         = useState(true)
+  const [showModal, setShowModal]     = useState(false)
+  const [saving, setSaving]           = useState(false)
+  const [conflict, setConflict]       = useState<string | null>(null)
+  const [deleting, setDeleting]       = useState<string | null>(null)
+
+  // View mode
+  const [viewMode, setViewMode]       = useState<'week' | 'board'>('week')
+  const [boardDay, setBoardDay]       = useState(formatDate(new Date()))
+
+  // Form state
   const [form, setForm] = useState({
     obra_id: '',
     assignType: 'worker' as 'worker' | 'all',
-    worker_id: '',
     date: formatDate(new Date()),
   })
+  const [selectedWorkerIds, setSelectedWorkerIds] = useState<string[]>([])
+
+  // Board drag state
+  const [dragWorker, setDragWorker] = useState<{
+    workerId: string
+    workerName: string
+    fromObraId: string | null
+    assignmentId: string | null
+  } | null>(null)
+  const [dragOverCol, setDragOverCol] = useState<string | 'unassigned' | null>(null)
 
   const weekDays = Array.from({ length: 7 }, (_, i) => formatDate(addDays(weekDate, i)))
 
@@ -66,46 +192,72 @@ export default function AsignacionesPage() {
 
   useEffect(() => { loadData() }, [loadData])
 
-  // Assignments grouped by date+obra
+  // Keep boardDay within the loaded week
+  useEffect(() => {
+    if (!weekDays.includes(boardDay)) setBoardDay(weekDays[0])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [weekDate])
+
   function getAssignmentsForDay(date: string) {
     return assignments.filter(a => a.date === date)
   }
 
   function openModal(date?: string) {
     setForm({
-      obra_id: obras[0]?.id ?? '',
+      obra_id: activeObras[0]?.id ?? '',
       assignType: 'worker',
-      worker_id: workers[0]?.id ?? '',
       date: date ?? formatDate(new Date()),
     })
+    setSelectedWorkerIds([])
     setConflict(null)
     setShowModal(true)
   }
 
+  // ── Save assignment(s) ────────────────────────────────────────────────────
   async function handleSave() {
     if (!form.obra_id) return
     setSaving(true); setConflict(null)
 
-    const body = {
-      obra_id:   form.obra_id,
-      worker_id: form.assignType === 'worker' ? form.worker_id : null,
-      group_id:  null,
-      date:      form.date,
+    if (form.assignType === 'all') {
+      await Promise.all(workers.map(w =>
+        fetch('/api/obra-assignments?force=1', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ obra_id: form.obra_id, worker_id: w.id, group_id: null, date: form.date }),
+        })
+      ))
+      setShowModal(false)
+      await loadData()
+      setSaving(false)
+      return
     }
 
+    if (selectedWorkerIds.length === 0) { setSaving(false); return }
+
+    if (selectedWorkerIds.length > 1) {
+      await Promise.all(selectedWorkerIds.map(wid =>
+        fetch('/api/obra-assignments?force=1', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ obra_id: form.obra_id, worker_id: wid, group_id: null, date: form.date }),
+        })
+      ))
+      setShowModal(false)
+      await loadData()
+      setSaving(false)
+      return
+    }
+
+    // Single worker: normal flow with conflict detection
     const res  = await fetch('/api/obra-assignments', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+      body: JSON.stringify({ obra_id: form.obra_id, worker_id: selectedWorkerIds[0], group_id: null, date: form.date }),
     })
     const json = await res.json()
 
     if (!res.ok) {
-      if (res.status === 409 && json.conflict) {
-        setConflict(json.error)
-        setSaving(false)
-        return
-      }
+      if (res.status === 409 && json.conflict) { setConflict(json.error); setSaving(false); return }
       setConflict(json.error ?? 'Error al guardar')
       setSaving(false)
       return
@@ -117,23 +269,16 @@ export default function AsignacionesPage() {
   }
 
   async function handleSaveWithConflict() {
-    // Force save ignoring conflict (worker can be in multiple obras same day)
     setSaving(true); setConflict(null)
-    const body = {
-      obra_id:   form.obra_id,
-      worker_id: form.assignType === 'worker' ? form.worker_id : null,
-      group_id:  null,
-      date:      form.date,
-      force:     true,
-    }
-    // We bypass conflict check by using a raw insert via a special flag
-    // For now, just insert directly (the API will check again, but we allow it)
-    const res  = await fetch('/api/obra-assignments?force=1', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    })
-    if (res.ok) { setShowModal(false); await loadData() }
+    await Promise.all(selectedWorkerIds.map(wid =>
+      fetch('/api/obra-assignments?force=1', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ obra_id: form.obra_id, worker_id: wid, group_id: null, date: form.date }),
+      })
+    ))
+    setShowModal(false)
+    await loadData()
     setSaving(false)
   }
 
@@ -142,6 +287,63 @@ export default function AsignacionesPage() {
     await fetch(`/api/obra-assignments/${id}`, { method: 'DELETE' })
     setAssignments(prev => prev.filter(a => a.id !== id))
     setDeleting(null)
+  }
+
+  // ── Board drag handlers ───────────────────────────────────────────────────
+  function handleDragStart(workerId: string, workerName: string, fromObraId: string | null, assignmentId: string | null) {
+    setDragWorker({ workerId, workerName, fromObraId, assignmentId })
+  }
+
+  function handleDragOver(e: React.DragEvent, col: string | 'unassigned') {
+    e.preventDefault()
+    setDragOverCol(col)
+  }
+
+  function handleDragLeave(e: React.DragEvent) {
+    // Only clear if leaving the column entirely
+    if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) {
+      setDragOverCol(null)
+    }
+  }
+
+  async function handleDrop(e: React.DragEvent, toObraId: string | 'unassigned') {
+    e.preventDefault()
+    setDragOverCol(null)
+    if (!dragWorker) return
+
+    const { workerId, fromObraId, assignmentId } = dragWorker
+    setDragWorker(null)
+
+    if (toObraId === 'unassigned') {
+      if (assignmentId) await handleDelete(assignmentId)
+      return
+    }
+
+    if (fromObraId === toObraId) return
+
+    // Delete old assignment if moving from another obra
+    if (assignmentId && fromObraId !== null) {
+      await fetch(`/api/obra-assignments/${assignmentId}`, { method: 'DELETE' })
+    }
+
+    await fetch('/api/obra-assignments?force=1', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ obra_id: toObraId, worker_id: workerId, group_id: null, date: boardDay }),
+    })
+    await loadData()
+  }
+
+  // ── Derived board data ────────────────────────────────────────────────────
+  const boardAssignments = assignments.filter(a => a.date === boardDay)
+  const assignedWorkerIdSet = new Set(boardAssignments.map(a => a.worker_id).filter(Boolean))
+  const unassignedWorkers = workers.filter(w => !assignedWorkerIdSet.has(w.id))
+
+  function getBoardObraWorkers(obraId: string) {
+    return boardAssignments
+      .filter(a => a.obra_id === obraId && a.worker_id)
+      .map(a => ({ assignment: a, worker: workers.find(w => w.id === a.worker_id) ?? null }))
+      .filter((x): x is { assignment: AssignWithJoins; worker: Profile } => x.worker !== null)
   }
 
   const activeObras = obras.filter(o => o.active)
@@ -154,9 +356,26 @@ export default function AsignacionesPage() {
           <h1 className="text-2xl font-bold text-white">Asignaciones</h1>
           <p className="text-zinc-500 text-sm mt-0.5">Asigna trabajadores a obras por día</p>
         </div>
-        <button onClick={() => openModal()} className="btn-primary gap-2">
-          <Plus size={16} />Nueva asignación
-        </button>
+        <div className="flex items-center gap-2">
+          {/* View toggle */}
+          <div className="flex items-center bg-zinc-800 rounded-xl p-1 gap-0.5">
+            <button
+              onClick={() => setViewMode('week')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${viewMode === 'week' ? 'bg-white text-zinc-950' : 'text-zinc-400 hover:text-white'}`}
+            >
+              <List size={13} />Lista
+            </button>
+            <button
+              onClick={() => setViewMode('board')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${viewMode === 'board' ? 'bg-white text-zinc-950' : 'text-zinc-400 hover:text-white'}`}
+            >
+              <LayoutGrid size={13} />Tablero
+            </button>
+          </div>
+          <button onClick={() => openModal()} className="btn-primary gap-2">
+            <Plus size={16} />Nueva asignación
+          </button>
+        </div>
       </div>
 
       {/* ── Week navigation ── */}
@@ -182,7 +401,10 @@ export default function AsignacionesPage() {
 
       {loading ? (
         <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 text-zinc-500 animate-spin" /></div>
-      ) : (
+      ) : viewMode === 'week' ? (
+        /* ══════════════════════════════════════════════════════════════════
+           WEEK VIEW
+        ══════════════════════════════════════════════════════════════════ */
         <div className="space-y-3">
           {weekDays.map(date => {
             const dayAssignments = getAssignmentsForDay(date)
@@ -207,7 +429,6 @@ export default function AsignacionesPage() {
                   <p className="text-xs text-zinc-600 py-1">Sin asignaciones</p>
                 ) : (
                   <div className="space-y-1.5">
-                    {/* Group by obra */}
                     {activeObras
                       .filter(obra => dayAssignments.some(a => a.obra_id === obra.id))
                       .map(obra => {
@@ -248,7 +469,6 @@ export default function AsignacionesPage() {
                           </div>
                         )
                       })}
-                    {/* Assignments without matched active obra */}
                     {dayAssignments
                       .filter(a => !activeObras.find(o => o.id === a.obra_id))
                       .map(a => (
@@ -267,6 +487,134 @@ export default function AsignacionesPage() {
               </div>
             )
           })}
+        </div>
+      ) : (
+        /* ══════════════════════════════════════════════════════════════════
+           BOARD VIEW (drag & drop)
+        ══════════════════════════════════════════════════════════════════ */
+        <div className="space-y-4">
+          {/* Day tabs */}
+          <div className="flex gap-1 overflow-x-auto pb-1 scrollbar-hide">
+            {weekDays.map(date => {
+              const isToday = date === formatDate(new Date())
+              const isActive = date === boardDay
+              return (
+                <button
+                  key={date}
+                  onClick={() => setBoardDay(date)}
+                  className={`flex-shrink-0 px-3 py-2 rounded-xl text-xs font-medium transition-colors capitalize whitespace-nowrap ${
+                    isActive
+                      ? 'bg-white text-zinc-950'
+                      : isToday
+                      ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400'
+                      : 'bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700'
+                  }`}
+                >
+                  {formatDayShort(date)}
+                  {isToday && !isActive && <span className="ml-1 text-[9px]">hoy</span>}
+                </button>
+              )
+            })}
+          </div>
+
+          {/* Drag hint */}
+          <p className="text-xs text-zinc-600 flex items-center gap-1.5">
+            <GripVertical size={12} />
+            Arrastra trabajadores entre columnas para asignarlos. Suelta en &quot;Sin asignar&quot; para quitar.
+          </p>
+
+          {/* Board columns */}
+          <div className="flex gap-3 overflow-x-auto pb-4">
+
+            {/* Unassigned column */}
+            <div
+              onDragOver={e => handleDragOver(e, 'unassigned')}
+              onDragLeave={handleDragLeave}
+              onDrop={e => handleDrop(e, 'unassigned')}
+              className={`flex-shrink-0 w-44 rounded-2xl border transition-colors ${
+                dragOverCol === 'unassigned'
+                  ? 'border-red-500/50 bg-red-500/5'
+                  : 'border-zinc-700 bg-zinc-800/30'
+              }`}
+            >
+              <div className="px-3 py-3 border-b border-zinc-700/50">
+                <div className="flex items-center gap-2">
+                  <Users size={13} className="text-zinc-500" />
+                  <span className="text-xs font-semibold text-zinc-400">Sin asignar</span>
+                  <span className="ml-auto text-[10px] text-zinc-600 bg-zinc-800 rounded-full px-1.5 py-0.5">
+                    {unassignedWorkers.length}
+                  </span>
+                </div>
+              </div>
+              <div className="p-2 space-y-1.5 min-h-24">
+                {unassignedWorkers.length === 0 ? (
+                  <p className="text-[10px] text-zinc-700 text-center py-4">Todos asignados</p>
+                ) : (
+                  unassignedWorkers.map(w => (
+                    <WorkerChip
+                      key={w.id}
+                      worker={w}
+                      assignmentId={null}
+                      obraId={null}
+                      onDragStart={handleDragStart}
+                      isDragging={dragWorker?.workerId === w.id}
+                    />
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* Obra columns */}
+            {activeObras.map(obra => {
+              const obraWorkers = getBoardObraWorkers(obra.id)
+              const isOver = dragOverCol === obra.id
+              return (
+                <div
+                  key={obra.id}
+                  onDragOver={e => handleDragOver(e, obra.id)}
+                  onDragLeave={handleDragLeave}
+                  onDrop={e => handleDrop(e, obra.id)}
+                  className={`flex-shrink-0 w-44 rounded-2xl border transition-colors ${
+                    isOver
+                      ? 'border-amber-500/50 bg-amber-500/5'
+                      : 'border-zinc-700 bg-zinc-800/30'
+                  }`}
+                >
+                  <div className="px-3 py-3 border-b border-zinc-700/50">
+                    <div className="flex items-center gap-2">
+                      <HardHat size={13} className="text-amber-400 flex-shrink-0" />
+                      <span className="text-xs font-semibold text-amber-300 truncate">{obra.name}</span>
+                      <span className="ml-auto flex-shrink-0 text-[10px] text-zinc-600 bg-zinc-800 rounded-full px-1.5 py-0.5">
+                        {obraWorkers.length}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="p-2 space-y-1.5 min-h-24">
+                    {obraWorkers.length === 0 && !isOver ? (
+                      <p className="text-[10px] text-zinc-700 text-center py-4">Soltar aquí</p>
+                    ) : (
+                      obraWorkers.map(({ assignment, worker }) => (
+                        <WorkerChip
+                          key={assignment.id}
+                          worker={worker}
+                          assignmentId={assignment.id}
+                          obraId={obra.id}
+                          onDelete={() => handleDelete(assignment.id)}
+                          onDragStart={handleDragStart}
+                          isDragging={dragWorker?.workerId === worker.id}
+                        />
+                      ))
+                    )}
+                    {isOver && (
+                      <div className="border-2 border-dashed border-amber-500/30 rounded-lg py-3 text-center text-[10px] text-amber-500/60">
+                        Soltar aquí
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
         </div>
       )}
 
@@ -313,18 +661,32 @@ export default function AsignacionesPage() {
                         ? 'bg-white text-zinc-950 border-white'
                         : 'bg-transparent text-zinc-400 border-zinc-700 hover:border-zinc-500'
                     }`}>
-                    Trabajador concreto
+                    <User size={13} className="inline mr-1.5" />Trabajadores
+                  </button>
+                  <button type="button"
+                    onClick={() => setForm(f => ({ ...f, assignType: 'all' }))}
+                    className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors border ${
+                      form.assignType === 'all'
+                        ? 'bg-white text-zinc-950 border-white'
+                        : 'bg-transparent text-zinc-400 border-zinc-700 hover:border-zinc-500'
+                    }`}>
+                    <Users size={13} className="inline mr-1.5" />Todos
                   </button>
                 </div>
 
                 {form.assignType === 'worker' && (
-                  <select className="input" value={form.worker_id}
-                    onChange={e => setForm(f => ({ ...f, worker_id: e.target.value }))}>
-                    <option value="">Seleccionar trabajador...</option>
-                    {workers.map(w => (
-                      <option key={w.id} value={w.id}>{w.full_name}</option>
-                    ))}
-                  </select>
+                  <WorkerMultiSelect
+                    workers={workers}
+                    selectedIds={selectedWorkerIds}
+                    onChange={setSelectedWorkerIds}
+                  />
+                )}
+
+                {form.assignType === 'all' && (
+                  <p className="text-xs text-zinc-500 bg-zinc-800 rounded-xl px-3 py-2.5 flex items-center gap-2">
+                    <Users size={13} className="text-zinc-400 flex-shrink-0" />
+                    Se asignarán los {workers.length} trabajadores activos a esta obra.
+                  </p>
                 )}
               </div>
 
@@ -354,7 +716,13 @@ export default function AsignacionesPage() {
               {!conflict && (
                 <div className="flex gap-3 pt-2">
                   <button onClick={() => setShowModal(false)} className="btn-secondary flex-1">Cancelar</button>
-                  <button onClick={handleSave} disabled={saving || !form.obra_id || (form.assignType === 'worker' && !form.worker_id)}
+                  <button
+                    onClick={handleSave}
+                    disabled={
+                      saving ||
+                      !form.obra_id ||
+                      (form.assignType === 'worker' && selectedWorkerIds.length === 0)
+                    }
                     className="btn-primary flex-1 gap-2">
                     {saving ? <><Loader2 size={14} className="animate-spin" />Guardando...</> : 'Guardar'}
                   </button>
