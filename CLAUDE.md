@@ -1,5 +1,15 @@
 # APP PARA FICHAR — Contexto del proyecto
 
+## INSTRUCCIÓN PERMANENTE: Auto-actualización de este archivo
+Actualiza este archivo CLAUDE.md **inmediatamente** después de cualquier cambio que:
+- Cree una nueva ruta API (`/api/...`) o página de admin/worker
+- Modifique el esquema de la BD (nuevas tablas, columnas, RLS)
+- Introduzca un nuevo patrón, convención o dependencia clave
+- Cambie la configuración de Supabase, Storage o Auth
+- Añada o elimine módulos principales del proyecto
+
+Cuando actualices CLAUDE.md, haz también `git add CLAUDE.md && git commit -m "docs: update CLAUDE.md"` en el mismo push que los demás cambios.
+
 ## Stack
 - **Next.js 16** App Router + Turbopack
 - **Supabase** (PostgreSQL + Auth + Realtime + Storage)

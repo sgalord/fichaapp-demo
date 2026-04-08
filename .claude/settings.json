@@ -1,0 +1,18 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "powershell",
+            "timeout": 5,
+            "command": "$raw=[Console]::In.ReadToEnd();try{$d=$raw|ConvertFrom-Json;$fp=[string]$d.tool_input.file_path;if($fp -match 'src.(types|app.api|app.admin)' -or $fp -match 'src.app.worker'){@{hookSpecificOutput=@{hookEventName='PostToolUse';additionalContext='RECORDATORIO AUTO: Has modificado un archivo fuente clave. Si este cambio introduce nuevas rutas API, tablas de BD, módulos, patrones o convenciones importantes, actualiza CLAUDE.md ahora para mantenerlo sincronizado.'}}|ConvertTo-Json -Compress}}catch{}",
+            "statusMessage": "Verificando CLAUDE.md..."
+          }
+        ]
+      }
+    ]
+  }
+}
