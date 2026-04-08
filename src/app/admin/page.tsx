@@ -52,30 +52,14 @@ export default function AdminDashboard() {
       .gte('timestamp', `${todayISO()}T00:00:00`)
       .order('timestamp', { ascending: false })
 
-    // Calcular qué trabajadores tienen obra asignada hoy (directo o por grupo)
+    // Calcular qué trabajadores tienen obra asignada hoy (sistema obra_assignments)
     const today = todayISO()
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const sb = supabase as any
-    const [{ data: directLA }, { data: groupLA }] = await Promise.all([
-      sb.from('location_assignments')
-        .select('worker_id, work_locations!inner(date)')
-        .eq('work_locations.date', today)
-        .not('worker_id', 'is', null),
-      sb.from('location_assignments')
-        .select('group_id, work_locations!inner(date)')
-        .eq('work_locations.date', today)
-        .not('group_id', 'is', null),
-    ])
-    const groupIds = (groupLA ?? []).map((la: Record<string, unknown>) => la.group_id as string).filter(Boolean)
-    let groupWorkerIds: string[] = []
-    if (groupIds.length > 0) {
-      const { data: ug } = await supabase.from('user_groups').select('user_id').in('group_id', groupIds)
-      groupWorkerIds = (ug ?? []).map((u: { user_id: string }) => u.user_id)
-    }
-    const withLocationToday = new Set([
-      ...(directLA ?? []).map((la: Record<string, unknown>) => la.worker_id as string).filter(Boolean),
-      ...groupWorkerIds,
-    ])
+    const obraRes = await fetch(`/api/obra-assignments?date=${today}`)
+    const obraData = obraRes.ok ? (await obraRes.json()).data ?? [] : []
+    const withLocationToday = new Set<string>(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (obraData as any[]).map((a: any) => a.worker_id).filter(Boolean)
+    )
 
     const statusMap: Record<string, WorkerStatus> = {}
     for (const p of (profiles ?? []) as Pick<Profile, 'id' | 'full_name' | 'avatar_url'>[]) {
