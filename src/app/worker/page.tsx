@@ -172,7 +172,8 @@ export default function WorkerPage() {
   }
 
   const nextType: 'in' | 'out'  = todayCheckIns[0]?.type === 'in' ? 'out' : 'in'
-  const withinRadius = distance !== null && todayObra !== null && distance <= todayObra.radius
+  // Si la obra no tiene coords (distance === null), se considera dentro del radio
+  const withinRadius = distance === null || (todayObra !== null && distance <= todayObra.radius)
 
   async function handleCheckIn() {
     if (!userCoords || !profile || !photoFile) return
@@ -386,7 +387,7 @@ export default function WorkerPage() {
                   : <Navigation size={18} />
                 }
                 {geoStatus === 'ok'
-                  ? `GPS obtenido · ${distanceLabel(distance!)}`
+                  ? `GPS obtenido${distance !== null ? ` · ${distanceLabel(distance)}` : ''}`
                   : geoStatus === 'loading'
                   ? 'Obteniendo ubicación...'
                   : 'Obtener mi ubicación GPS'
