@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { haversineDistance } from '@/lib/utils'
 
 const CheckinSchema = z.object({
   type:               z.enum(['in', 'out']),
   latitude:           z.number().min(-90).max(90).nullable().optional(),
   longitude:          z.number().min(-180).max(180).nullable().optional(),
-  work_location_id:   z.string().uuid().nullable().optional(),
+  obra_id:            z.string().uuid().nullable().optional(),   // sistema nuevo
+  work_location_id:   z.string().uuid().nullable().optional(),   // legacy
   photo_url:          z.string().url().nullable().optional(),
   device_fingerprint: z.string().max(64).nullable().optional(),
 })
@@ -28,12 +29,27 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: message }, { status: 400 })
   }
 
-  const { type, latitude, longitude, work_location_id, photo_url, device_fingerprint } = parsed.data
+  const { type, latitude, longitude, obra_id, work_location_id, photo_url, device_fingerprint } = parsed.data
 
   let distance_meters: number | null = null
   let within_radius = true
 
-  if (work_location_id && latitude != null && longitude != null) {
+  // Sistema nuevo: calcular distancia desde obras
+  if (obra_id && latitude != null && longitude != null) {
+    const admin = await createAdminClient()
+    const { data: obra } = await admin
+      .from('obras')
+      .select('latitude, longitude, radius')
+      .eq('id', obra_id)
+      .single()
+
+    if (obra?.latitude != null && obra?.longitude != null) {
+      distance_meters = haversineDistance(latitude, longitude, obra.latitude, obra.longitude)
+      within_radius = distance_meters <= (obra.radius ?? 200)
+    }
+  }
+  // Sistema legacy: calcular distancia desde work_locations
+  else if (work_location_id && latitude != null && longitude != null) {
     const { data: loc } = await supabase
       .from('work_locations')
       .select('latitude, longitude, radius')

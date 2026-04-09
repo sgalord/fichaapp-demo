@@ -114,7 +114,26 @@ latitude, longitude, radius INTEGER, active BOOLEAN, created_by UUID
 - Login: si el campo no contiene `@` → fetch POST /api/auth/username → obtiene email → auth normal
 - Fingerprint del dispositivo: SHA-256 de hardware+canvas → 24 chars → guarda en check_ins
 - Username format: `nombre.apellido` (primera palabra de cada uno, sin tildes, lowercase)
-- Default password trabajadores importados: `Built2026!`
+- **Contraseñas de importación**: se generan aleatoriamente con `crypto.randomBytes` — se devuelven UNA VEZ en la respuesta POST y no se almacenan. Mostrar al admin en `/admin/import`.
+- **Validación**: usar **Zod** en todos los API routes. Patrón: `Schema.safeParse(body)` → devolver `{ error: message }` con 400 si falla.
+- **Audit logging**: llamar `logAudit()` de `@/lib/audit` tras cada operación admin destructiva. Falla silenciosamente.
+- **Rate limiting**: usar `rateLimit()` de `@/lib/rate-limit` en endpoints públicos sensibles. 10 req / 15 min por IP en `/api/auth/username`.
+- **obra_id en checkin**: `POST /api/checkin` acepta `obra_id` (sistema nuevo, busca en `obras`) y `work_location_id` (legacy). Si `obra_id` presente, calcula distancia con `createAdminClient()` contra tabla `obras`.
+- **worker/page.tsx usa Supabase directo** para `obra_assignments` (no API route) → requiere RLS policy `worker_id = auth.uid()` en tabla `obra_assignments`.
+- **tomorrowISO()** exportada desde `@/lib/utils` usando date-fns (hora local, no UTC).
+- **GET /api/obra-assignments**: admins ven todo; workers solo sus propias filas (forzado server-side). Soporta Bearer token + fallback cookie.
+
+## Seguridad — reglas clave
+- Todos los endpoints de admin requieren `requireAdmin()` — incluido GET `/api/admin/import-workers`
+- `/api/auth/username` tiene rate limiting (10/15min por IP) y devuelve mensaje genérico para evitar enumeración
+- Datos de trabajadores en `src/data/import-data.ts` (no inline en el route)
+
+## Nuevos módulos (auditoría 2026-04)
+```
+src/data/import-data.ts   → IMPORT_WORKERS + IMPORT_OBRAS (datos del Excel, fuera del route)
+src/lib/rate-limit.ts     → rateLimit(key, limit, windowMs) — in-memory, sliding window
+src/lib/audit.ts          → logAudit(entry) — escribe en tabla audit_logs vía service role
+```
 
 ## Trabajadores importados (Excel: "Planilla personal 04-2026.xlsx")
 20 trabajadores con username formato `nombre.apellido@built.work` como email.
@@ -141,6 +160,35 @@ CREATE TABLE IF NOT EXISTS obras (...);
 CREATE TABLE IF NOT EXISTS obra_assignments (...);
 -- RLS policies para obras/obra_assignments
 -- Storage buckets: checkin-photos, avatars
+
+-- ⚠️ PENDIENTE CRÍTICO: ejecutar en Supabase SQL Editor para que
+-- los trabajadores puedan ver sus propias asignaciones de obra:
+CREATE POLICY "workers_read_own_assignments"
+ON public.obra_assignments FOR SELECT TO authenticated
+USING (worker_id = auth.uid());
+
+CREATE POLICY "admins_all_assignments"
+ON public.obra_assignments FOR ALL TO authenticated
+USING (
+  EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin','superadmin'))
+);
+
+-- audit_logs (PENDIENTE de ejecutar en Supabase)
+CREATE TABLE IF NOT EXISTS audit_logs (
+  id          UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  admin_id    UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  action      TEXT NOT NULL,
+  target_type TEXT NOT NULL,
+  target_id   TEXT,
+  target_name TEXT,
+  details     JSONB,
+  created_at  TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Admins can view audit logs" ON audit_logs FOR SELECT
+  USING (EXISTS (
+    SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin', 'superadmin')
+  ));
 ```
 
 ## Logo/icono
