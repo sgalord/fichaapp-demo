@@ -1,7 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 
-async function getAuthUser() {
+async function getAuthUser(req?: NextRequest) {
+  // Intentar autenticación por Bearer token (peticiones cliente con fetch)
+  const authHeader = req?.headers.get('authorization') ?? ''
+  if (authHeader.startsWith('Bearer ')) {
+    const token = authHeader.slice(7)
+    const admin = await createAdminClient()
+    const { data: { user } } = await admin.auth.getUser(token)
+    if (user) {
+      const { data: profile } = await admin.from('profiles').select('role').eq('id', user.id).single()
+      return { user, role: profile?.role ?? 'worker' }
+    }
+  }
+  // Fallback: autenticación por cookie de sesión
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return null
@@ -10,7 +22,7 @@ async function getAuthUser() {
 }
 
 export async function GET(req: NextRequest) {
-  const auth = await getAuthUser()
+  const auth = await getAuthUser(req)
   if (!auth) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
   const isAdmin = ['admin', 'superadmin'].includes(auth.role)
@@ -42,7 +54,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const auth = await getAuthUser()
+  const auth = await getAuthUser(req)
   if (!auth || !['admin', 'superadmin'].includes(auth.role)) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
   }

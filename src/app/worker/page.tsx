@@ -81,6 +81,12 @@ export default function WorkerPage() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { router.push('/login'); return }
 
+    // Obtener token para autenticar peticiones API desde el cliente
+    const { data: { session } } = await supabase.auth.getSession()
+    const authHeaders: HeadersInit = session?.access_token
+      ? { Authorization: `Bearer ${session.access_token}` }
+      : {}
+
     const [{ data: prof }, { data: checkIns }] = await Promise.all([
       supabase.from('profiles').select('id,full_name,role,active,avatar_url,username').eq('id', user.id).single(),
       supabase.from('check_ins')
@@ -94,13 +100,13 @@ export default function WorkerPage() {
     setProfile(prof as Profile)
     setTodayCheckIns((checkIns ?? []) as CheckIn[])
 
-    // Obtener obra de hoy y mañana via API (bypasses RLS issues)
+    // Obtener obra de hoy y mañana — pasamos el Bearer token para garantizar auth
     const today    = todayISO()
     const tomorrow = tomorrowISO()
 
     const [todayRes, tomorrowRes] = await Promise.all([
-      fetch(`/api/obra-assignments?date=${today}`),
-      fetch(`/api/obra-assignments?date=${tomorrow}`),
+      fetch(`/api/obra-assignments?date=${today}`,    { headers: authHeaders }),
+      fetch(`/api/obra-assignments?date=${tomorrow}`, { headers: authHeaders }),
     ])
     const todayData    = todayRes.ok    ? (await todayRes.json()).data    : []
     const tomorrowData = tomorrowRes.ok ? (await tomorrowRes.json()).data : []
