@@ -49,6 +49,17 @@ export function todayISO(): string {
   return format(new Date(), 'yyyy-MM-dd')
 }
 
+export function tomorrowISO(): string {
+  const d = new Date()
+  d.setDate(d.getDate() + 1)
+  return format(d, 'yyyy-MM-dd')
+}
+
+/** Devuelve una fecha ISO local (yyyy-MM-dd) a partir de un objeto Date */
+export function dateToISO(d: Date): string {
+  return format(d, 'yyyy-MM-dd')
+}
+
 // Calcular horas trabajadas entre entrada y salida
 export function calcHours(inTime: string, outTime: string): string {
   const diff = new Date(outTime).getTime() - new Date(inTime).getTime()

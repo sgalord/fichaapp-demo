@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import {
   haversineDistance, formatTime, formatDate, distanceLabel,
-  todayISO, mapsUrl,
+  todayISO, tomorrowISO, mapsUrl,
 } from '@/lib/utils'
 import { getDeviceFingerprint } from '@/lib/device-fingerprint'
 import type { Profile, CheckIn } from '@/types'
@@ -50,12 +50,6 @@ async function compressImage(file: File): Promise<Blob> {
     img.onerror = reject
     img.src = url
   })
-}
-
-function tomorrowISO() {
-  const d = new Date()
-  d.setDate(d.getDate() + 1)
-  return d.toISOString().split('T')[0]
 }
 
 export default function WorkerPage() {
