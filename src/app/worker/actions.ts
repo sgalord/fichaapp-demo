@@ -1,6 +1,6 @@
 'use server'
 
-import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/server'
 
 export interface ObraInfo {
   id: string
@@ -11,46 +11,43 @@ export interface ObraInfo {
   radius: number
 }
 
-export async function getWorkerObras(today: string, tomorrow: string): Promise<{
-  todayObra: ObraInfo | null
-  tomorrowObra: ObraInfo | null
-  workerId: string | null
-  error?: string
-}> {
-  try {
-    // Leer sesión del trabajador desde cookies del servidor
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return { todayObra: null, tomorrowObra: null, workerId: null, error: 'no_user' }
+/**
+ * Obtiene las obras asignadas al trabajador para hoy y mañana.
+ * Usa createAdminClient() → bypass total de RLS.
+ * El userId viene verificado desde el cliente (supabase.auth.getUser()).
+ * Los Server Actions de Next.js están firmados — no son invocables desde fuera.
+ */
+export async function getWorkerObras(
+  userId: string,
+  today: string,
+  tomorrow: string
+): Promise<{ todayObra: ObraInfo | null; tomorrowObra: ObraInfo | null }> {
+  if (!userId) return { todayObra: null, tomorrowObra: null }
 
-    // Usar admin client para bypassear RLS por completo
+  try {
     const admin = await createAdminClient()
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const sb = admin as any
 
-    const [{ data: todayData, error: e1 }, { data: tomorrowData, error: e2 }] = await Promise.all([
+    const [{ data: todayData }, { data: tomorrowData }] = await Promise.all([
       sb.from('obra_assignments')
         .select('obra:obras(id,name,address,latitude,longitude,radius)')
-        .eq('worker_id', user.id)
+        .eq('worker_id', userId)
         .eq('date', today)
         .limit(1),
       sb.from('obra_assignments')
         .select('obra:obras(id,name,address,latitude,longitude,radius)')
-        .eq('worker_id', user.id)
+        .eq('worker_id', userId)
         .eq('date', tomorrow)
         .limit(1),
     ])
 
-    if (e1) console.error('[getWorkerObras] today error:', e1)
-    if (e2) console.error('[getWorkerObras] tomorrow error:', e2)
-
     return {
       todayObra:    todayData?.[0]?.obra    ?? null,
       tomorrowObra: tomorrowData?.[0]?.obra ?? null,
-      workerId:     user.id,
     }
   } catch (err) {
-    console.error('[getWorkerObras] exception:', err)
-    return { todayObra: null, tomorrowObra: null, workerId: null, error: String(err) }
+    console.error('[getWorkerObras]', err)
+    return { todayObra: null, tomorrowObra: null }
   }
 }

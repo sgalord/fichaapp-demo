@@ -99,7 +99,7 @@ export default function WorkerPage() {
     // (corre en servidor con admin client → bypasea RLS por completo)
     const today    = todayISO()
     const tomorrow = tomorrowISO()
-    const { todayObra, tomorrowObra } = await getWorkerObras(today, tomorrow)
+    const { todayObra, tomorrowObra } = await getWorkerObras(user.id, today, tomorrow)
 
     setTodayObra(todayObra)
     setTomorrowObra(tomorrowObra)
