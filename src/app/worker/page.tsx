@@ -6,6 +6,7 @@ import {
   haversineDistance, formatTime, formatDate, distanceLabel,
   todayISO, tomorrowISO, mapsUrl,
 } from '@/lib/utils'
+import { getWorkerObras } from './actions'
 import { getDeviceFingerprint } from '@/lib/device-fingerprint'
 import type { Profile, CheckIn } from '@/types'
 import {
@@ -94,27 +95,14 @@ export default function WorkerPage() {
     setProfile(prof as Profile)
     setTodayCheckIns((checkIns ?? []) as CheckIn[])
 
-    // Obtener obra de hoy y mañana directamente desde Supabase
-    // (requiere política RLS: worker_id = auth.uid())
+    // Obtener obra de hoy y mañana via Server Action
+    // (corre en servidor con admin client → bypasea RLS por completo)
     const today    = todayISO()
     const tomorrow = tomorrowISO()
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const sb = supabase as any
-    const [{ data: todayAssigns }, { data: tomorrowAssigns }] = await Promise.all([
-      sb.from('obra_assignments')
-        .select('obra:obras(id,name,address,latitude,longitude,radius)')
-        .eq('worker_id', user.id)
-        .eq('date', today)
-        .limit(1),
-      sb.from('obra_assignments')
-        .select('obra:obras(id,name,address,latitude,longitude,radius)')
-        .eq('worker_id', user.id)
-        .eq('date', tomorrow)
-        .limit(1),
-    ])
+    const { todayObra, tomorrowObra } = await getWorkerObras(today, tomorrow)
 
-    setTodayObra(todayAssigns?.[0]?.obra ?? null)
-    setTomorrowObra(tomorrowAssigns?.[0]?.obra ?? null)
+    setTodayObra(todayObra)
+    setTomorrowObra(tomorrowObra)
 
     setDataLoading(false)
   }, [supabase, router])

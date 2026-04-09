@@ -119,7 +119,7 @@ latitude, longitude, radius INTEGER, active BOOLEAN, created_by UUID
 - **Audit logging**: llamar `logAudit()` de `@/lib/audit` tras cada operación admin destructiva. Falla silenciosamente.
 - **Rate limiting**: usar `rateLimit()` de `@/lib/rate-limit` en endpoints públicos sensibles. 10 req / 15 min por IP en `/api/auth/username`.
 - **obra_id en checkin**: `POST /api/checkin` acepta `obra_id` (sistema nuevo, busca en `obras`) y `work_location_id` (legacy). Si `obra_id` presente, calcula distancia con `createAdminClient()` contra tabla `obras`.
-- **worker/page.tsx usa Supabase directo** para `obra_assignments` (no API route) → requiere RLS policy `worker_id = auth.uid()` en tabla `obra_assignments`.
+- **worker/page.tsx usa Server Action** `getWorkerObras()` de `src/app/worker/actions.ts` para obtener obras de hoy/mañana. Corre en el servidor con `createAdminClient()` → bypass total de RLS, sin problemas de cookies ni tokens.
 - **tomorrowISO()** exportada desde `@/lib/utils` usando date-fns (hora local, no UTC).
 - **GET /api/obra-assignments**: admins ven todo; workers solo sus propias filas (forzado server-side). Soporta Bearer token + fallback cookie.
 
