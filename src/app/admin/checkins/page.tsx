@@ -6,7 +6,7 @@ import { formatDateTime, formatDate, distanceLabel, todayISO, initials, avatarCo
 import type { CheckIn, Profile, WorkLocation } from '@/types'
 import {
   Search, Calendar, Edit2, Loader2, X,
-  CheckCircle2, XCircle, AlertTriangle, Clock, Download, ShieldAlert,
+  CheckCircle2, XCircle, AlertTriangle, Clock, Download, ShieldAlert, MapPin,
 } from 'lucide-react'
 import * as XLSX from 'xlsx'
 
@@ -321,15 +321,18 @@ export default function CheckinsPage() {
                       <span className={ci.type === 'in' ? 'badge-green' : 'badge-red'}>
                         {ci.type === 'in' ? 'Entrada' : 'Salida'}
                       </span>
-                      {!ci.within_radius && (
-                        <span className="badge-orange">
-                          <AlertTriangle size={9} />Fuera radio
+                      {ci.distance_meters != null && (
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold border ${
+                          ci.within_radius
+                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                            : 'bg-red-500/10 text-red-400 border-red-500/20'
+                        }`}>
+                          <MapPin size={9} />
+                          {distanceLabel(ci.distance_meters)}
+                          {!ci.within_radius && ' · Fuera radio'}
                         </span>
                       )}
                       {ci.manually_modified && <span className="badge-gray">Modificado</span>}
-                      {ci.distance_meters != null && (
-                        <span className="badge-gray">{distanceLabel(ci.distance_meters)}</span>
-                      )}
                       {isFraud && (
                         <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-red-500/20 text-red-300 border border-red-500/30">
                           <ShieldAlert size={9} />

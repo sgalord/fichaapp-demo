@@ -247,7 +247,7 @@ export default function WorkerPage() {
     )
   }
 
-  const canCheckIn = geoStatus === 'ok' && !!photoFile && !checking
+  const canCheckIn = geoStatus === 'ok' && withinRadius && !!photoFile && !checking
 
   return (
     <div className="min-h-screen bg-zinc-950 flex flex-col max-w-md mx-auto">
@@ -395,8 +395,8 @@ export default function WorkerPage() {
               </button>
             </div>
 
-            {/* Paso 2: Foto (aparece al obtener GPS) */}
-            {geoStatus === 'ok' && (
+            {/* Paso 2: Foto (solo si dentro del radio) */}
+            {geoStatus === 'ok' && withinRadius && (
               <div className="space-y-2">
                 <p className="text-xs font-medium text-zinc-500 px-1">2 · Fotografía</p>
 
@@ -447,52 +447,57 @@ export default function WorkerPage() {
               </div>
             )}
 
-            {/* Aviso fuera de radio */}
+            {/* Bloqueado: fuera de radio */}
             {geoStatus === 'ok' && !withinRadius && todayObra?.latitude && (
-              <div className="flex items-start gap-2.5 bg-amber-500/10 border border-amber-500/20 rounded-xl p-3.5">
-                <AlertTriangle size={16} className="text-amber-400 flex-shrink-0 mt-0.5" />
-                <p className="text-sm text-amber-300">
-                  Estás a <strong>{distanceLabel(distance!)}</strong> de la obra.
-                  El radio es {todayObra.radius} m. El fichaje se registrará como incidencia.
-                </p>
+              <div className="flex items-start gap-2.5 bg-red-500/10 border border-red-500/25 rounded-xl p-4">
+                <AlertTriangle size={18} className="text-red-400 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-semibold text-red-300">No puedes fichar desde aquí</p>
+                  <p className="text-sm text-red-400/80 mt-0.5">
+                    Estás a <strong className="text-red-300">{distanceLabel(distance!)}</strong> del centro de la obra.
+                    Debes estar a menos de <strong className="text-red-300">{todayObra.radius} m</strong> para poder registrar la entrada.
+                  </p>
+                </div>
               </div>
             )}
 
-            {/* Paso 3: Botón fichar */}
-            <div className="space-y-1">
-              {geoStatus === 'ok' && (
-                <p className="text-xs font-medium text-zinc-500 px-1">3 · Fichar</p>
-              )}
-              <button
-                onClick={handleCheckIn}
-                disabled={!canCheckIn}
-                className={`w-full flex items-center justify-center gap-3 rounded-xl px-6 py-5 text-base font-bold transition-all active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed ${
-                  nextType === 'in'
-                    ? 'bg-emerald-500 text-white hover:bg-emerald-400'
-                    : 'bg-red-500 text-white hover:bg-red-400'
-                }`}
-              >
-                {checking
-                  ? <>
-                      <Loader2 size={22} className="animate-spin" />
-                      {uploading ? 'Subiendo foto...' : 'Registrando...'}
-                    </>
-                  : nextType === 'in'
-                  ? <><CheckCircle2 size={22} />Registrar Entrada</>
-                  : <><XCircle size={22} />Registrar Salida</>
-                }
-              </button>
-              {geoStatus !== 'ok' && (
-                <p className="text-xs text-zinc-600 text-center pt-1">
-                  Primero obtén tu ubicación GPS
-                </p>
-              )}
-              {geoStatus === 'ok' && !photoFile && (
-                <p className="text-xs text-zinc-600 text-center pt-1">
-                  Falta la fotografía del paso 2
-                </p>
-              )}
-            </div>
+            {/* Paso 3: Botón fichar (solo si dentro del radio) */}
+            {withinRadius && (
+              <div className="space-y-1">
+                {geoStatus === 'ok' && (
+                  <p className="text-xs font-medium text-zinc-500 px-1">3 · Fichar</p>
+                )}
+                <button
+                  onClick={handleCheckIn}
+                  disabled={!canCheckIn}
+                  className={`w-full flex items-center justify-center gap-3 rounded-xl px-6 py-5 text-base font-bold transition-all active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed ${
+                    nextType === 'in'
+                      ? 'bg-emerald-500 text-white hover:bg-emerald-400'
+                      : 'bg-red-500 text-white hover:bg-red-400'
+                  }`}
+                >
+                  {checking
+                    ? <>
+                        <Loader2 size={22} className="animate-spin" />
+                        {uploading ? 'Subiendo foto...' : 'Registrando...'}
+                      </>
+                    : nextType === 'in'
+                    ? <><CheckCircle2 size={22} />Registrar Entrada</>
+                    : <><XCircle size={22} />Registrar Salida</>
+                  }
+                </button>
+                {geoStatus !== 'ok' && (
+                  <p className="text-xs text-zinc-600 text-center pt-1">
+                    Primero obtén tu ubicación GPS
+                  </p>
+                )}
+                {geoStatus === 'ok' && !photoFile && (
+                  <p className="text-xs text-zinc-600 text-center pt-1">
+                    Falta la fotografía del paso 2
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         ) : (
           <div className="card border-dashed flex items-center gap-3">
