@@ -371,31 +371,87 @@ export default function WorkerPage() {
           <div className="space-y-3">
 
             {/* Paso 1: GPS */}
-            <div className="space-y-1">
+            <div className="space-y-2">
               <p className="text-xs font-medium text-zinc-500 px-1">1 · Ubicación GPS</p>
               <button
                 onClick={locateMe}
                 disabled={geoStatus === 'loading'}
-                className={`w-full flex items-center justify-center gap-3 rounded-xl px-5 py-4 text-sm font-medium transition-all border ${
-                  geoStatus === 'ok'
-                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
-                    : 'bg-zinc-800 border-zinc-700 text-zinc-300 hover:border-zinc-600'
-                }`}
+                className="w-full flex items-center justify-center gap-3 rounded-xl px-5 py-4 text-sm font-medium transition-all border bg-zinc-800 border-zinc-700 text-zinc-300 hover:border-zinc-600 disabled:opacity-60"
               >
                 {geoStatus === 'loading'
                   ? <Loader2 size={18} className="animate-spin" />
                   : <Navigation size={18} />
                 }
-                {geoStatus === 'ok'
-                  ? `GPS obtenido${distance !== null ? ` · ${distanceLabel(distance)}` : ''}`
-                  : geoStatus === 'loading'
-                  ? 'Obteniendo ubicación...'
-                  : 'Obtener mi ubicación GPS'
-                }
+                {geoStatus === 'loading' ? 'Obteniendo ubicación...' : 'Obtener mi ubicación GPS'}
               </button>
+
+              {/* ── Panel de distancia (aparece tras obtener GPS) ── */}
+              {geoStatus === 'ok' && (
+                <div className={`rounded-xl p-4 border flex items-center gap-4 ${
+                  withinRadius
+                    ? 'bg-emerald-500/10 border-emerald-500/25'
+                    : 'bg-red-500/10 border-red-500/25'
+                }`}>
+                  {/* Icono */}
+                  <div className={`w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 ${
+                    withinRadius ? 'bg-emerald-500/20' : 'bg-red-500/20'
+                  }`}>
+                    <MapPin size={22} className={withinRadius ? 'text-emerald-400' : 'text-red-400'} />
+                  </div>
+
+                  {/* Texto */}
+                  <div className="flex-1 min-w-0">
+                    {distance !== null ? (
+                      <>
+                        <p className={`text-2xl font-extrabold leading-none ${
+                          withinRadius ? 'text-emerald-300' : 'text-red-300'
+                        }`}>
+                          {Math.round(distance)} m
+                        </p>
+                        <p className={`text-xs mt-1 ${
+                          withinRadius ? 'text-emerald-400/80' : 'text-red-400/80'
+                        }`}>
+                          {withinRadius
+                            ? `✓ Dentro del radio · puedes fichar`
+                            : `✗ Fuera del radio · radio máx. ${todayObra.radius} m`
+                          }
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-sm font-semibold text-emerald-300">GPS obtenido</p>
+                        <p className="text-xs text-emerald-400/70 mt-0.5">La obra no tiene coordenadas registradas</p>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Badge estado */}
+                  <span className={`text-xs font-bold px-2.5 py-1 rounded-lg flex-shrink-0 ${
+                    withinRadius
+                      ? 'bg-emerald-500/20 text-emerald-300'
+                      : 'bg-red-500/20 text-red-300'
+                  }`}>
+                    {withinRadius ? '✓ OK' : '✗ KO'}
+                  </span>
+                </div>
+              )}
             </div>
 
-            {/* Paso 2: Foto (solo si dentro del radio) */}
+            {/* ── Bloqueado: fuera de radio ── */}
+            {geoStatus === 'ok' && !withinRadius && (
+              <div className="flex items-start gap-3 bg-red-500/10 border border-red-500/25 rounded-xl p-4">
+                <AlertTriangle size={20} className="text-red-400 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-bold text-red-300">No puedes fichar desde aquí</p>
+                  <p className="text-sm text-red-400/80 mt-1">
+                    Estás a <strong className="text-red-200">{distance !== null ? `${Math.round(distance)} m` : '?'}</strong> del centro de la obra.
+                    Acércate hasta estar dentro de los <strong className="text-red-200">{todayObra.radius} m</strong> de radio y vuelve a pulsar el GPS.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* ── Paso 2: Foto (solo si dentro del radio y GPS ok) ── */}
             {geoStatus === 'ok' && withinRadius && (
               <div className="space-y-2">
                 <p className="text-xs font-medium text-zinc-500 px-1">2 · Fotografía</p>
@@ -412,61 +468,33 @@ export default function WorkerPage() {
                 {photoPreview ? (
                   <div className="relative rounded-xl overflow-hidden border border-zinc-700">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={photoPreview}
-                      alt="Foto del fichaje"
-                      className="w-full h-40 object-cover"
-                    />
+                    <img src={photoPreview} alt="Foto del fichaje" className="w-full h-40 object-cover" />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
                     <div className="absolute bottom-2 left-3 flex items-center gap-1.5 text-xs text-white/80">
-                      <CheckCircle2 size={13} className="text-emerald-400" />
-                      Foto lista
+                      <CheckCircle2 size={13} className="text-emerald-400" />Foto lista
                     </div>
-                    <button
-                      onClick={removePhoto}
-                      className="absolute top-2 right-2 bg-zinc-900/80 backdrop-blur-sm rounded-full p-1.5 text-zinc-300 hover:text-white transition-colors"
-                    >
+                    <button onClick={removePhoto}
+                      className="absolute top-2 right-2 bg-zinc-900/80 backdrop-blur-sm rounded-full p-1.5 text-zinc-300 hover:text-white transition-colors">
                       <X size={14} />
                     </button>
-                    <button
-                      onClick={() => photoInputRef.current?.click()}
-                      className="absolute bottom-2 right-3 bg-zinc-900/80 backdrop-blur-sm rounded-lg px-2.5 py-1 text-xs text-zinc-300 hover:text-white flex items-center gap-1 transition-colors"
-                    >
+                    <button onClick={() => photoInputRef.current?.click()}
+                      className="absolute bottom-2 right-3 bg-zinc-900/80 backdrop-blur-sm rounded-lg px-2.5 py-1 text-xs text-zinc-300 hover:text-white flex items-center gap-1 transition-colors">
                       <Camera size={11} /> Repetir
                     </button>
                   </div>
                 ) : (
-                  <button
-                    onClick={() => photoInputRef.current?.click()}
-                    className="w-full flex items-center justify-center gap-3 rounded-xl px-5 py-4 text-sm font-medium bg-zinc-800 border border-zinc-700 text-zinc-300 hover:border-zinc-600 transition-all"
-                  >
-                    <Camera size={18} />
-                    Tomar fotografía (obligatorio)
+                  <button onClick={() => photoInputRef.current?.click()}
+                    className="w-full flex items-center justify-center gap-3 rounded-xl px-5 py-4 text-sm font-medium bg-zinc-800 border border-zinc-700 text-zinc-300 hover:border-zinc-600 transition-all">
+                    <Camera size={18} />Tomar fotografía (obligatorio)
                   </button>
                 )}
               </div>
             )}
 
-            {/* Bloqueado: fuera de radio */}
-            {geoStatus === 'ok' && !withinRadius && todayObra?.latitude && (
-              <div className="flex items-start gap-2.5 bg-red-500/10 border border-red-500/25 rounded-xl p-4">
-                <AlertTriangle size={18} className="text-red-400 flex-shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-sm font-semibold text-red-300">No puedes fichar desde aquí</p>
-                  <p className="text-sm text-red-400/80 mt-0.5">
-                    Estás a <strong className="text-red-300">{distanceLabel(distance!)}</strong> del centro de la obra.
-                    Debes estar a menos de <strong className="text-red-300">{todayObra.radius} m</strong> para poder registrar la entrada.
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {/* Paso 3: Botón fichar (solo si dentro del radio) */}
-            {withinRadius && (
+            {/* ── Paso 3: Botón fichar (solo si dentro del radio) ── */}
+            {geoStatus === 'ok' && withinRadius && (
               <div className="space-y-1">
-                {geoStatus === 'ok' && (
-                  <p className="text-xs font-medium text-zinc-500 px-1">3 · Fichar</p>
-                )}
+                <p className="text-xs font-medium text-zinc-500 px-1">3 · Fichar</p>
                 <button
                   onClick={handleCheckIn}
                   disabled={!canCheckIn}
@@ -477,27 +505,25 @@ export default function WorkerPage() {
                   }`}
                 >
                   {checking
-                    ? <>
-                        <Loader2 size={22} className="animate-spin" />
-                        {uploading ? 'Subiendo foto...' : 'Registrando...'}
-                      </>
+                    ? <><Loader2 size={22} className="animate-spin" />{uploading ? 'Subiendo foto...' : 'Registrando...'}</>
                     : nextType === 'in'
                     ? <><CheckCircle2 size={22} />Registrar Entrada</>
                     : <><XCircle size={22} />Registrar Salida</>
                   }
                 </button>
-                {geoStatus !== 'ok' && (
-                  <p className="text-xs text-zinc-600 text-center pt-1">
-                    Primero obtén tu ubicación GPS
-                  </p>
-                )}
-                {geoStatus === 'ok' && !photoFile && (
-                  <p className="text-xs text-zinc-600 text-center pt-1">
-                    Falta la fotografía del paso 2
-                  </p>
+                {!photoFile && (
+                  <p className="text-xs text-zinc-600 text-center pt-1">Falta la fotografía del paso 2</p>
                 )}
               </div>
             )}
+
+            {/* Hint inicial antes de GPS */}
+            {geoStatus === 'idle' && (
+              <p className="text-xs text-zinc-600 text-center">
+                Pulsa el botón para obtener tu ubicación GPS
+              </p>
+            )}
+
           </div>
         ) : (
           <div className="card border-dashed flex items-center gap-3">
