@@ -34,8 +34,10 @@ Usar Desktop Commander `start_process` con `cmd.exe`, luego `interact_with_proce
 /admin/obras        → CRUD obras (centros de trabajo permanentes)
 /admin/asignaciones → asignar trabajadores a obras por día/semana
 /admin/checkins     → historial fichajes + detección fraude dispositivo
+/admin/ausencias    → gestión de ausencias/vacaciones (aprobar/rechazar)
 /admin/groups       → grupos de trabajadores
 /admin/reports      → informes
+/worker/ausencias   → solicitar y ver ausencias (trabajador)
 /admin/import       → importar 20 trabajadores desde Excel (un clic)
 /forgot-password    → recuperar contraseña
 /reset-password     → nueva contraseña (PKCE flow)
@@ -60,6 +62,9 @@ POST /api/obra-assignments       → crear asignación (detecta conflicto, ?forc
 DELETE /api/obra-assignments/[id]
 GET  /api/admin/import-workers   → preview de los 20 trabajadores a importar
 POST /api/admin/import-workers   → ejecuta la importación (crea users + obras)
+GET  /api/absences               → lista ausencias (workers: solo las suyas; admins: todas + filtros)
+POST /api/absences               → crear solicitud de ausencia
+GET/PUT/DELETE /api/absences/[id] → ver/aprobar-rechazar/eliminar ausencia
 GET  /api/geocode?address=...    → geocodificación de dirección
 GET/POST /api/locations          → ubicaciones legacy (sistema antiguo)
 GET/PUT/DELETE /api/locations/[id]
@@ -106,6 +111,7 @@ latitude, longitude, radius INTEGER, active BOOLEAN, created_by UUID
 ## Storage buckets
 - `checkin-photos` → fotos de fichajes (`{worker_id}/{timestamp}.jpg`)
 - `avatars` → fotos de perfil (`{worker_id}/avatar.jpg`, siempre upsert:true)
+- `absence-documents` → justificantes de ausencias (`{worker_id}/{timestamp}.{ext}`, privado, max 10 MB)
 
 ## Patrones importantes
 - **upsert:true** siempre en uploads de avatars (evita error "file already exists")
@@ -172,6 +178,10 @@ ON public.obra_assignments FOR ALL TO authenticated
 USING (
   EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin','superadmin'))
 );
+
+-- ⚠️ PENDIENTE CRÍTICO: ausencias (ejecutar migrations/absences.sql en Supabase SQL Editor)
+-- Crea tabla absences + RLS policies + storage bucket absence-documents
+-- Ver archivo completo en: migrations/absences.sql
 
 -- audit_logs (PENDIENTE de ejecutar en Supabase)
 CREATE TABLE IF NOT EXISTS audit_logs (

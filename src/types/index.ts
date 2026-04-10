@@ -95,6 +95,41 @@ export interface CheckIn {
   work_location?: Pick<WorkLocation, 'id' | 'name' | 'address'>
 }
 
+// ── Ausencias / Vacaciones ──────────────────────────────────────────────────
+export type AbsenceType = 'vacation' | 'personal_day' | 'sick_leave' | 'other'
+export type AbsenceStatus = 'pending' | 'approved' | 'rejected'
+
+export const ABSENCE_TYPE_LABELS: Record<AbsenceType, string> = {
+  vacation:    'Vacaciones',
+  personal_day: 'Asunto propio',
+  sick_leave:  'Baja / Enfermedad',
+  other:       'Otro',
+}
+
+export const ABSENCE_STATUS_LABELS: Record<AbsenceStatus, string> = {
+  pending:  'Pendiente',
+  approved: 'Aprobado',
+  rejected: 'Rechazado',
+}
+
+export interface Absence {
+  id: string
+  worker_id: string
+  type: AbsenceType
+  date_from: string           // ISO date YYYY-MM-DD
+  date_to: string             // ISO date YYYY-MM-DD
+  reason: string | null
+  document_url: string | null // URL del justificante (Storage)
+  status: AbsenceStatus
+  reviewed_by: string | null
+  reviewed_at: string | null
+  review_notes: string | null
+  created_at: string
+  updated_at: string
+  // Joins
+  worker?: Pick<Profile, 'id' | 'full_name' | 'avatar_url'>
+}
+
 // Tipos para las respuestas de la API
 export interface ApiResponse<T = unknown> {
   data?: T

@@ -39,7 +39,8 @@
       "Bash(rm src/app/api/admin/import-workers/route.ts)",
       "Bash(rmdir src/app/admin/import)",
       "Bash(rmdir src/app/api/admin/import-workers)",
-      "Bash(rmdir src/app/api/admin)"
+      "Bash(rmdir src/app/api/admin)",
+      "Bash(grep -r \"vercel.app\\\\|fichaapp\" .env*)"
     ]
   }
 }
