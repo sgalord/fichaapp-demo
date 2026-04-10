@@ -5,7 +5,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import {
   LayoutDashboard, Users, ClipboardList,
-  LogOut, Users2, BarChart3, Menu, X, HardHat, CalendarDays, Upload,
+  LogOut, Users2, BarChart3, Menu, X, HardHat, CalendarDays,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useState } from 'react'
@@ -18,7 +18,6 @@ const NAV = [
   { href: '/admin/checkins',     label: 'Fichajes',     icon: ClipboardList },
   { href: '/admin/groups',       label: 'Grupos',       icon: Users2 },
   { href: '/admin/reports',      label: 'Informes',     icon: BarChart3 },
-  { href: '/admin/import',       label: 'Importar',     icon: Upload },
 ]
 
 function MobileBottomNav() {

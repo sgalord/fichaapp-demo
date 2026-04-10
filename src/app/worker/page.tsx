@@ -247,7 +247,7 @@ export default function WorkerPage() {
     )
   }
 
-  const canCheckIn = geoStatus === 'ok' && withinRadius && !!photoFile && !checking
+  const canCheckIn = geoStatus === 'ok' && !!photoFile && !checking
 
   return (
     <div className="min-h-screen bg-zinc-950 flex flex-col max-w-md mx-auto">
@@ -390,13 +390,13 @@ export default function WorkerPage() {
                 <div className={`rounded-xl p-4 border flex items-center gap-4 ${
                   withinRadius
                     ? 'bg-emerald-500/10 border-emerald-500/25'
-                    : 'bg-red-500/10 border-red-500/25'
+                    : 'bg-amber-500/10 border-amber-500/25'
                 }`}>
                   {/* Icono */}
                   <div className={`w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 ${
-                    withinRadius ? 'bg-emerald-500/20' : 'bg-red-500/20'
+                    withinRadius ? 'bg-emerald-500/20' : 'bg-amber-500/20'
                   }`}>
-                    <MapPin size={22} className={withinRadius ? 'text-emerald-400' : 'text-red-400'} />
+                    <MapPin size={22} className={withinRadius ? 'text-emerald-400' : 'text-amber-400'} />
                   </div>
 
                   {/* Texto */}
@@ -404,16 +404,16 @@ export default function WorkerPage() {
                     {distance !== null ? (
                       <>
                         <p className={`text-2xl font-extrabold leading-none ${
-                          withinRadius ? 'text-emerald-300' : 'text-red-300'
+                          withinRadius ? 'text-emerald-300' : 'text-amber-300'
                         }`}>
                           {Math.round(distance)} m
                         </p>
                         <p className={`text-xs mt-1 ${
-                          withinRadius ? 'text-emerald-400/80' : 'text-red-400/80'
+                          withinRadius ? 'text-emerald-400/80' : 'text-amber-400/80'
                         }`}>
                           {withinRadius
                             ? `✓ Dentro del radio · puedes fichar`
-                            : `✗ Fuera del radio · radio máx. ${todayObra.radius} m`
+                            : `⚠ Fuera del radio · se registrará la incidencia`
                           }
                         </p>
                       </>
@@ -429,30 +429,16 @@ export default function WorkerPage() {
                   <span className={`text-xs font-bold px-2.5 py-1 rounded-lg flex-shrink-0 ${
                     withinRadius
                       ? 'bg-emerald-500/20 text-emerald-300'
-                      : 'bg-red-500/20 text-red-300'
+                      : 'bg-amber-500/20 text-amber-300'
                   }`}>
-                    {withinRadius ? '✓ OK' : '✗ KO'}
+                    {withinRadius ? '✓ OK' : '⚠ Aviso'}
                   </span>
                 </div>
               )}
             </div>
 
-            {/* ── Bloqueado: fuera de radio ── */}
-            {geoStatus === 'ok' && !withinRadius && (
-              <div className="flex items-start gap-3 bg-red-500/10 border border-red-500/25 rounded-xl p-4">
-                <AlertTriangle size={20} className="text-red-400 flex-shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-sm font-bold text-red-300">No puedes fichar desde aquí</p>
-                  <p className="text-sm text-red-400/80 mt-1">
-                    Estás a <strong className="text-red-200">{distance !== null ? `${Math.round(distance)} m` : '?'}</strong> del centro de la obra.
-                    Acércate hasta estar dentro de los <strong className="text-red-200">{todayObra.radius} m</strong> de radio y vuelve a pulsar el GPS.
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {/* ── Paso 2: Foto (solo si dentro del radio y GPS ok) ── */}
-            {geoStatus === 'ok' && withinRadius && (
+            {/* ── Paso 2: Foto (solo si GPS ok) ── */}
+            {geoStatus === 'ok' && (
               <div className="space-y-2">
                 <p className="text-xs font-medium text-zinc-500 px-1">2 · Fotografía</p>
 
@@ -491,8 +477,8 @@ export default function WorkerPage() {
               </div>
             )}
 
-            {/* ── Paso 3: Botón fichar (solo si dentro del radio) ── */}
-            {geoStatus === 'ok' && withinRadius && (
+            {/* ── Paso 3: Botón fichar ── */}
+            {geoStatus === 'ok' && (
               <div className="space-y-1">
                 <p className="text-xs font-medium text-zinc-500 px-1">3 · Fichar</p>
                 <button

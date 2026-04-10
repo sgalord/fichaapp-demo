@@ -1,11 +1,18 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import type { Obra } from '@/types'
 import {
   Plus, Search, Edit2, ToggleLeft, ToggleRight, Loader2, X,
   HardHat, MapPin, Ruler, CheckCircle2, AlertTriangle,
 } from 'lucide-react'
+
+interface GeoSuggestion {
+  latitude:     number
+  longitude:    number
+  display_name: string
+  label:        string
+}
 
 export default function ObrasPage() {
   const [obras, setObras]         = useState<Obra[]>([])
@@ -13,15 +20,32 @@ export default function ObrasPage() {
   const [loading, setLoading]     = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [editing, setEditing]     = useState<Obra | null>(null)
-  const [saving, setSaving]             = useState(false)
-  const [formError, setFormError]       = useState<string | null>(null)
-  const [geocoding, setGeocoding]       = useState(false)
-  const [geocodeOk, setGeocodeOk]       = useState(false)
-  const [geocodeErr, setGeocodeErr]     = useState<string | null>(null)
+  const [saving, setSaving]       = useState(false)
+  const [formError, setFormError] = useState<string | null>(null)
+
+  // Geocoding / autocomplete
+  const [geocodeOk, setGeocodeOk]         = useState(false)
+  const [geocodeErr, setGeocodeErr]       = useState<string | null>(null)
+  const [suggestions, setSuggestions]     = useState<GeoSuggestion[]>([])
+  const [showSugg, setShowSugg]           = useState(false)
+  const [loadingSugg, setLoadingSugg]     = useState(false)
+  const debounceRef                       = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const addressWrapRef                    = useRef<HTMLDivElement>(null)
 
   const [form, setForm] = useState({
     name: '', address: '', latitude: '', longitude: '', radius: '200',
   })
+
+  // ── Cerrar dropdown al click fuera ──────────────────────────────────────
+  useEffect(() => {
+    function onClickOutside(e: MouseEvent) {
+      if (addressWrapRef.current && !addressWrapRef.current.contains(e.target as Node)) {
+        setShowSugg(false)
+      }
+    }
+    document.addEventListener('mousedown', onClickOutside)
+    return () => document.removeEventListener('mousedown', onClickOutside)
+  }, [])
 
   async function load() {
     setLoading(true)
@@ -38,6 +62,8 @@ export default function ObrasPage() {
   function resetGeoState() {
     setGeocodeOk(false)
     setGeocodeErr(null)
+    setSuggestions([])
+    setShowSugg(false)
   }
 
   function openNew() {
@@ -51,59 +77,76 @@ export default function ObrasPage() {
   function openEdit(obra: Obra) {
     setEditing(obra)
     setForm({
-      name: obra.name,
-      address: obra.address ?? '',
-      latitude: obra.latitude?.toString() ?? '',
+      name:      obra.name,
+      address:   obra.address ?? '',
+      latitude:  obra.latitude?.toString()  ?? '',
       longitude: obra.longitude?.toString() ?? '',
-      radius: obra.radius.toString(),
+      radius:    obra.radius.toString(),
     })
     setFormError(null)
-    // Si ya tiene coordenadas, mostrar como OK
     setGeocodeOk(!!(obra.latitude && obra.longitude))
     setGeocodeErr(null)
+    setSuggestions([])
+    setShowSugg(false)
     setShowModal(true)
   }
 
-  async function geocodeAddress(addressOverride?: string) {
-    const addr = (addressOverride ?? form.address).trim()
-    if (!addr) return
-    setGeocoding(true)
-    setGeocodeOk(false)
-    setGeocodeErr(null)
+  // ── Autocomplete: busca sugerencias con debounce 350 ms ────────────────
+  const fetchSuggestions = useCallback(async (text: string) => {
+    if (text.trim().length < 3) {
+      setSuggestions([])
+      setShowSugg(false)
+      return
+    }
+    setLoadingSugg(true)
     try {
-      const res = await fetch(`/api/geocode?address=${encodeURIComponent(addr)}`)
-      const json = await res.json()
-      if (res.ok && json.latitude != null) {
-        setForm(f => ({
-          ...f,
-          latitude:  json.latitude.toString(),
-          longitude: json.longitude.toString(),
-        }))
-        setGeocodeOk(true)
-      } else {
-        setGeocodeErr(json.error ?? 'Dirección no encontrada — introduce coordenadas manualmente')
+      const res = await fetch(
+        `/api/geocode?address=${encodeURIComponent(text.trim())}&limit=5`,
+      )
+      if (res.ok) {
+        const data: GeoSuggestion[] = await res.json()
+        setSuggestions(Array.isArray(data) ? data : [])
+        setShowSugg(Array.isArray(data) && data.length > 0)
       }
     } catch {
-      setGeocodeErr('Error de red al geocodificar')
+      // silencioso
     } finally {
-      setGeocoding(false)
+      setLoadingSugg(false)
     }
+  }, [])
+
+  function handleAddressChange(value: string) {
+    setForm(f => ({ ...f, address: value }))
+    setGeocodeOk(false)
+    setGeocodeErr(null)
+
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => fetchSuggestions(value), 350)
   }
 
-  // Auto-geocodificar al salir del campo dirección si no hay coords ya
-  async function handleAddressBlur() {
-    if (!form.address.trim()) return
-    if (form.latitude && form.longitude) return   // ya tiene coords, no sobreescribir
-    await geocodeAddress()
+  // ── Seleccionar sugerencia ─────────────────────────────────────────────
+  function pickSuggestion(s: GeoSuggestion) {
+    setForm(f => ({
+      ...f,
+      address:   s.label,
+      latitude:  s.latitude.toString(),
+      longitude: s.longitude.toString(),
+    }))
+    setGeocodeOk(true)
+    setGeocodeErr(null)
+    setSuggestions([])
+    setShowSugg(false)
   }
 
+  // ── Guardar ────────────────────────────────────────────────────────────
   async function handleSave() {
     if (!form.name.trim()) { setFormError('El nombre es obligatorio'); return }
     setSaving(true); setFormError(null)
 
-    // Auto-geocodificar si hay dirección pero faltan coordenadas
-    let lat  = form.latitude  ? parseFloat(form.latitude)  : null
-    let lng  = form.longitude ? parseFloat(form.longitude) : null
+    let lat = form.latitude  ? parseFloat(form.latitude)  : null
+    let lng = form.longitude ? parseFloat(form.longitude) : null
+
+    // Auto-geocodificar si hay dirección pero aún no hay coords
     if (form.address.trim() && (!lat || !lng)) {
       try {
         const res  = await fetch(`/api/geocode?address=${encodeURIComponent(form.address.trim())}`)
@@ -111,10 +154,9 @@ export default function ObrasPage() {
         if (res.ok && json.latitude != null) {
           lat = json.latitude
           lng = json.longitude
-          setForm(f => ({ ...f, latitude: String(lat), longitude: String(lng) }))
           setGeocodeOk(true)
         }
-      } catch { /* ignora, guardamos sin coords */ }
+      } catch { /* guarda sin coords */ }
     }
 
     const body = {
@@ -147,7 +189,7 @@ export default function ObrasPage() {
 
   const filtered = obras.filter(o =>
     o.name.toLowerCase().includes(query.toLowerCase()) ||
-    (o.address ?? '').toLowerCase().includes(query.toLowerCase())
+    (o.address ?? '').toLowerCase().includes(query.toLowerCase()),
   )
 
   return (
@@ -182,19 +224,25 @@ export default function ObrasPage() {
                   <div className="flex items-center gap-2">
                     <p className="font-semibold text-zinc-200">{obra.name}</p>
                     {!obra.active && <span className="badge-red">Inactiva</span>}
+                    {!(obra.latitude && obra.longitude) && (
+                      <span className="badge-orange text-[10px]">Sin GPS</span>
+                    )}
                   </div>
                   {obra.address && (
                     <p className="text-xs text-zinc-500 flex items-center gap-1 mt-0.5">
                       <MapPin size={11} />{obra.address}
                     </p>
                   )}
-                  {obra.latitude && obra.longitude && (
-                    <p className="text-xs text-zinc-600 mt-0.5">
+                  {obra.latitude && obra.longitude ? (
+                    <p className="text-xs text-zinc-600 mt-0.5 flex items-center gap-1">
+                      <CheckCircle2 size={10} className="text-emerald-600" />
                       {obra.latitude.toFixed(5)}, {obra.longitude.toFixed(5)}
-                      <span className="ml-2 flex items-center gap-0.5 inline-flex">
-                        <Ruler size={10} />{obra.radius}m
+                      <span className="ml-1 inline-flex items-center gap-0.5">
+                        <Ruler size={10} />{obra.radius} m
                       </span>
                     </p>
+                  ) : (
+                    <p className="text-xs text-amber-600/70 mt-0.5">Sin coordenadas — edita para añadir</p>
                   )}
                 </div>
                 <div className="flex gap-1 flex-shrink-0">
@@ -223,13 +271,14 @@ export default function ObrasPage() {
       {/* ── Modal ── */}
       {showModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end lg:items-center justify-center p-4 animate-fade-in">
-          <div className="bg-zinc-900 border border-zinc-800 w-full max-w-md rounded-2xl shadow-2xl">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800">
+          <div className="bg-zinc-900 border border-zinc-800 w-full max-w-md rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800 sticky top-0 bg-zinc-900 z-10">
               <h2 className="font-semibold text-white">{editing ? 'Editar obra' : 'Nueva obra'}</h2>
               <button onClick={() => setShowModal(false)} className="text-zinc-500 hover:text-white p-1"><X size={20} /></button>
             </div>
             <div className="px-5 py-5 space-y-4">
 
+              {/* Nombre */}
               <div>
                 <label className="text-sm font-medium text-zinc-300 mb-1.5 block">Nombre *</label>
                 <input className="input" value={form.name}
@@ -237,76 +286,91 @@ export default function ObrasPage() {
                   placeholder="Ej: Edificio Calle Mayor 12" />
               </div>
 
+              {/* Dirección con autocomplete */}
               <div>
-                <label className="text-sm font-medium text-zinc-300 mb-1.5 block">Dirección</label>
-                <div className="flex gap-2">
+                <label className="text-sm font-medium text-zinc-300 mb-1.5 block">
+                  Dirección
+                  {loadingSugg && <Loader2 size={11} className="inline ml-1.5 animate-spin text-zinc-500" />}
+                </label>
+
+                <div ref={addressWrapRef} className="relative">
                   <input
-                    className="input flex-1"
+                    className="input w-full"
                     value={form.address}
-                    onChange={e => {
-                      setForm(f => ({ ...f, address: e.target.value }))
-                      resetGeoState()
-                    }}
-                    onBlur={handleAddressBlur}
+                    onChange={e => handleAddressChange(e.target.value)}
+                    onFocus={() => suggestions.length > 0 && setShowSugg(true)}
                     placeholder="Ej: Calle Aguilera 4, Madrid"
-                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); geocodeAddress() } }}
+                    autoComplete="off"
                   />
-                  <button
-                    type="button"
-                    onClick={() => geocodeAddress()}
-                    disabled={geocoding || !form.address.trim()}
-                    className="btn-secondary px-3 flex-shrink-0 gap-1.5"
-                    title="Obtener coordenadas de la dirección"
-                  >
-                    {geocoding
-                      ? <Loader2 size={14} className="animate-spin" />
-                      : <MapPin size={14} />
-                    }
-                    Geocodificar
-                  </button>
+
+                  {/* ── Dropdown sugerencias ── */}
+                  {showSugg && suggestions.length > 0 && (
+                    <ul className="absolute left-0 right-0 top-full mt-1 bg-zinc-800 border border-zinc-700 rounded-xl shadow-2xl z-50 overflow-hidden">
+                      {suggestions.map((s, i) => (
+                        <li key={i}>
+                          <button
+                            type="button"
+                            onMouseDown={e => { e.preventDefault(); pickSuggestion(s) }}
+                            className="w-full text-left px-4 py-3 hover:bg-zinc-700 transition-colors border-b border-zinc-700/50 last:border-0 flex items-start gap-2.5"
+                          >
+                            <MapPin size={13} className="text-zinc-400 flex-shrink-0 mt-0.5" />
+                            <span className="text-sm text-zinc-200 leading-snug">{s.label}</span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
 
-                {/* Feedback geocodificación */}
-                {geocoding && (
-                  <p className="text-xs text-zinc-400 mt-1.5 flex items-center gap-1.5">
-                    <Loader2 size={11} className="animate-spin" />Buscando coordenadas...
-                  </p>
-                )}
-                {geocodeOk && !geocoding && (
+                {/* Feedback */}
+                {geocodeOk && (
                   <p className="text-xs text-emerald-400 mt-1.5 flex items-center gap-1.5">
                     <CheckCircle2 size={11} />
-                    Coordenadas obtenidas: {parseFloat(form.latitude).toFixed(5)}, {parseFloat(form.longitude).toFixed(5)}
+                    Coordenadas: {parseFloat(form.latitude).toFixed(5)}, {parseFloat(form.longitude).toFixed(5)}
                   </p>
                 )}
-                {geocodeErr && !geocoding && (
+                {geocodeErr && (
                   <p className="text-xs text-amber-400 mt-1.5 flex items-center gap-1.5">
                     <AlertTriangle size={11} />{geocodeErr}
                   </p>
                 )}
-                {!geocoding && !geocodeOk && !geocodeErr && (
-                  <p className="text-xs text-zinc-600 mt-1">
-                    Las coordenadas se obtienen automáticamente al escribir la dirección
-                  </p>
+                {!geocodeOk && !geocodeErr && (
+                  <p className="text-xs text-zinc-600 mt-1">Escribe la dirección y selecciona del desplegable</p>
                 )}
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-sm font-medium text-zinc-300 mb-1.5 block">Latitud</label>
-                  <input className="input" type="number" step="any" value={form.latitude}
-                    onChange={e => setForm(f => ({ ...f, latitude: e.target.value }))}
-                    placeholder="40.416775" />
+              {/* Lat/Lng manuales (colapsados si ya hay coords) */}
+              {!geocodeOk && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-sm font-medium text-zinc-300 mb-1.5 block">Latitud</label>
+                    <input className="input" type="number" step="any" value={form.latitude}
+                      onChange={e => setForm(f => ({ ...f, latitude: e.target.value }))}
+                      placeholder="40.416775" />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-zinc-300 mb-1.5 block">Longitud</label>
+                    <input className="input" type="number" step="any" value={form.longitude}
+                      onChange={e => setForm(f => ({ ...f, longitude: e.target.value }))}
+                      placeholder="-3.703790" />
+                  </div>
                 </div>
-                <div>
-                  <label className="text-sm font-medium text-zinc-300 mb-1.5 block">Longitud</label>
-                  <input className="input" type="number" step="any" value={form.longitude}
-                    onChange={e => setForm(f => ({ ...f, longitude: e.target.value }))}
-                    placeholder="-3.703790" />
-                </div>
-              </div>
+              )}
 
+              {/* Botón para editar coords manualmente si autocomplete ya funcionó */}
+              {geocodeOk && (
+                <button
+                  type="button"
+                  onClick={() => setGeocodeOk(false)}
+                  className="text-xs text-zinc-500 hover:text-zinc-300 underline"
+                >
+                  Editar coordenadas manualmente
+                </button>
+              )}
+
+              {/* Radio */}
               <div>
-                <label className="text-sm font-medium text-zinc-300 mb-1.5 block flex items-center gap-1.5">
+                <label className="text-sm font-medium text-zinc-300 mb-1.5 flex items-center gap-1.5">
                   <Ruler size={13} />Radio de fichaje (metros)
                 </label>
                 <input className="input" type="number" min="50" max="5000" value={form.radius}
