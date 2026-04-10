@@ -62,9 +62,11 @@ POST /api/obra-assignments       → crear asignación (detecta conflicto, ?forc
 DELETE /api/obra-assignments/[id]
 GET  /api/admin/import-workers   → preview de los 20 trabajadores a importar
 POST /api/admin/import-workers   → ejecuta la importación (crea users + obras)
-GET  /api/absences               → lista ausencias (workers: solo las suyas; admins: todas + filtros)
-POST /api/absences               → crear solicitud de ausencia
+GET  /api/absences               → lista ausencias (workers: solo las suyas; admins: todas + filtros status/date)
+POST /api/absences               → crear solicitud de ausencia (detecta solapamiento)
 GET/PUT/DELETE /api/absences/[id] → ver/aprobar-rechazar/eliminar ausencia
+GET  /api/absence-allowances?year → saldo vacaciones+asuntos propios por trabajador (calculado)
+PUT  /api/absence-allowances     → upsert días asignados a un trabajador para un año
 GET  /api/geocode?address=...    → geocodificación de dirección
 GET/POST /api/locations          → ubicaciones legacy (sistema antiguo)
 GET/PUT/DELETE /api/locations/[id]
@@ -112,6 +114,29 @@ latitude, longitude, radius INTEGER, active BOOLEAN, created_by UUID
 - `checkin-photos` → fotos de fichajes (`{worker_id}/{timestamp}.jpg`)
 - `avatars` → fotos de perfil (`{worker_id}/avatar.jpg`, siempre upsert:true)
 - `absence-documents` → justificantes de ausencias (`{worker_id}/{timestamp}.{ext}`, privado, max 10 MB)
+
+## Módulo de Ausencias (feature/absences-management)
+### Tablas
+```sql
+-- absences: solicitudes de ausencia
+id, worker_id, type (vacation|personal_day|sick_leave|other),
+date_from, date_to, reason, document_url, status (pending|approved|rejected),
+reviewed_by, reviewed_at, review_notes, created_at, updated_at
+
+-- absence_allowances: días disponibles por trabajador/año
+id, worker_id, year, vacation_days (default 22), personal_days (default 6)
+UNIQUE(worker_id, year)
+```
+### Páginas
+- `/admin/ausencias` → 2 tabs: Solicitudes (aprobar/rechazar) + Saldos por trabajador (editable)
+- `/worker/ausencias` → ver y solicitar ausencias, subir justificante
+### Lógica saldos
+- GET /api/absence-allowances calcula en tiempo real: total (de allowances o default) - consumido (absences aprobadas del año)
+- Defaults: 22 días vacaciones, 6 días asuntos propios
+- Admin puede editar el total por trabajador/año desde la tab Saldos
+### Informes
+- /admin/reports ahora incluye columnas: Vacaciones, As. propios, Bajas, Otras ausencias
+- Excel exporta 3 hojas: Resumen, Fichajes, Ausencias
 
 ## Patrones importantes
 - **upsert:true** siempre en uploads de avatars (evita error "file already exists")
