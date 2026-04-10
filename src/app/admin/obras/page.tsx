@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import type { Obra } from '@/types'
 import {
   Plus, Search, Edit2, ToggleLeft, ToggleRight, Loader2, X,
-  HardHat, MapPin, Ruler,
+  HardHat, MapPin, Ruler, CheckCircle2, AlertTriangle,
 } from 'lucide-react'
 
 export default function ObrasPage() {
@@ -13,9 +13,11 @@ export default function ObrasPage() {
   const [loading, setLoading]     = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [editing, setEditing]     = useState<Obra | null>(null)
-  const [saving, setSaving]       = useState(false)
-  const [formError, setFormError] = useState<string | null>(null)
-  const [geocoding, setGeocoding] = useState(false)
+  const [saving, setSaving]             = useState(false)
+  const [formError, setFormError]       = useState<string | null>(null)
+  const [geocoding, setGeocoding]       = useState(false)
+  const [geocodeOk, setGeocodeOk]       = useState(false)
+  const [geocodeErr, setGeocodeErr]     = useState<string | null>(null)
 
   const [form, setForm] = useState({
     name: '', address: '', latitude: '', longitude: '', radius: '200',
@@ -33,10 +35,16 @@ export default function ObrasPage() {
 
   useEffect(() => { load() }, [])
 
+  function resetGeoState() {
+    setGeocodeOk(false)
+    setGeocodeErr(null)
+  }
+
   function openNew() {
     setEditing(null)
     setForm({ name: '', address: '', latitude: '', longitude: '', radius: '200' })
     setFormError(null)
+    resetGeoState()
     setShowModal(true)
   }
 
@@ -50,32 +58,70 @@ export default function ObrasPage() {
       radius: obra.radius.toString(),
     })
     setFormError(null)
+    // Si ya tiene coordenadas, mostrar como OK
+    setGeocodeOk(!!(obra.latitude && obra.longitude))
+    setGeocodeErr(null)
     setShowModal(true)
   }
 
-  async function geocodeAddress() {
-    if (!form.address.trim()) return
+  async function geocodeAddress(addressOverride?: string) {
+    const addr = (addressOverride ?? form.address).trim()
+    if (!addr) return
     setGeocoding(true)
+    setGeocodeOk(false)
+    setGeocodeErr(null)
     try {
-      const res = await fetch(`/api/geocode?address=${encodeURIComponent(form.address)}`)
-      if (res.ok) {
-        const { latitude, longitude } = await res.json()
-        setForm(f => ({ ...f, latitude: latitude.toString(), longitude: longitude.toString() }))
+      const res = await fetch(`/api/geocode?address=${encodeURIComponent(addr)}`)
+      const json = await res.json()
+      if (res.ok && json.latitude != null) {
+        setForm(f => ({
+          ...f,
+          latitude:  json.latitude.toString(),
+          longitude: json.longitude.toString(),
+        }))
+        setGeocodeOk(true)
+      } else {
+        setGeocodeErr(json.error ?? 'Dirección no encontrada — introduce coordenadas manualmente')
       }
+    } catch {
+      setGeocodeErr('Error de red al geocodificar')
     } finally {
       setGeocoding(false)
     }
+  }
+
+  // Auto-geocodificar al salir del campo dirección si no hay coords ya
+  async function handleAddressBlur() {
+    if (!form.address.trim()) return
+    if (form.latitude && form.longitude) return   // ya tiene coords, no sobreescribir
+    await geocodeAddress()
   }
 
   async function handleSave() {
     if (!form.name.trim()) { setFormError('El nombre es obligatorio'); return }
     setSaving(true); setFormError(null)
 
+    // Auto-geocodificar si hay dirección pero faltan coordenadas
+    let lat  = form.latitude  ? parseFloat(form.latitude)  : null
+    let lng  = form.longitude ? parseFloat(form.longitude) : null
+    if (form.address.trim() && (!lat || !lng)) {
+      try {
+        const res  = await fetch(`/api/geocode?address=${encodeURIComponent(form.address.trim())}`)
+        const json = await res.json()
+        if (res.ok && json.latitude != null) {
+          lat = json.latitude
+          lng = json.longitude
+          setForm(f => ({ ...f, latitude: String(lat), longitude: String(lng) }))
+          setGeocodeOk(true)
+        }
+      } catch { /* ignora, guardamos sin coords */ }
+    }
+
     const body = {
       name:      form.name,
       address:   form.address,
-      latitude:  form.latitude  ? parseFloat(form.latitude)  : null,
-      longitude: form.longitude ? parseFloat(form.longitude) : null,
+      latitude:  lat,
+      longitude: lng,
       radius:    parseInt(form.radius) || 200,
     }
 
@@ -194,18 +240,54 @@ export default function ObrasPage() {
               <div>
                 <label className="text-sm font-medium text-zinc-300 mb-1.5 block">Dirección</label>
                 <div className="flex gap-2">
-                  <input className="input flex-1" value={form.address}
-                    onChange={e => setForm(f => ({ ...f, address: e.target.value }))}
-                    placeholder="Calle, número, ciudad"
+                  <input
+                    className="input flex-1"
+                    value={form.address}
+                    onChange={e => {
+                      setForm(f => ({ ...f, address: e.target.value }))
+                      resetGeoState()
+                    }}
+                    onBlur={handleAddressBlur}
+                    placeholder="Ej: Calle Aguilera 4, Madrid"
                     onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); geocodeAddress() } }}
                   />
-                  <button type="button" onClick={geocodeAddress} disabled={geocoding}
-                    className="btn-secondary px-3 flex-shrink-0 gap-1.5">
-                    {geocoding ? <Loader2 size={14} className="animate-spin" /> : <MapPin size={14} />}
-                    GPS
+                  <button
+                    type="button"
+                    onClick={() => geocodeAddress()}
+                    disabled={geocoding || !form.address.trim()}
+                    className="btn-secondary px-3 flex-shrink-0 gap-1.5"
+                    title="Obtener coordenadas de la dirección"
+                  >
+                    {geocoding
+                      ? <Loader2 size={14} className="animate-spin" />
+                      : <MapPin size={14} />
+                    }
+                    Geocodificar
                   </button>
                 </div>
-                <p className="text-xs text-zinc-600 mt-1">Pulsa &quot;GPS&quot; para obtener coordenadas automáticamente</p>
+
+                {/* Feedback geocodificación */}
+                {geocoding && (
+                  <p className="text-xs text-zinc-400 mt-1.5 flex items-center gap-1.5">
+                    <Loader2 size={11} className="animate-spin" />Buscando coordenadas...
+                  </p>
+                )}
+                {geocodeOk && !geocoding && (
+                  <p className="text-xs text-emerald-400 mt-1.5 flex items-center gap-1.5">
+                    <CheckCircle2 size={11} />
+                    Coordenadas obtenidas: {parseFloat(form.latitude).toFixed(5)}, {parseFloat(form.longitude).toFixed(5)}
+                  </p>
+                )}
+                {geocodeErr && !geocoding && (
+                  <p className="text-xs text-amber-400 mt-1.5 flex items-center gap-1.5">
+                    <AlertTriangle size={11} />{geocodeErr}
+                  </p>
+                )}
+                {!geocoding && !geocodeOk && !geocodeErr && (
+                  <p className="text-xs text-zinc-600 mt-1">
+                    Las coordenadas se obtienen automáticamente al escribir la dirección
+                  </p>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-3">
