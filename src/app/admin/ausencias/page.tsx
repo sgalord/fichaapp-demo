@@ -82,7 +82,7 @@ export default function AusenciasAdminPage() {
             tab === 'saldos' ? 'bg-white text-zinc-950' : 'text-zinc-500 hover:text-zinc-200'
           )}
         >
-          <BarChart3 size={15} />Saldos por trabajador
+          <BarChart3 size={15} />Gestión de días libres
         </button>
       </div>
 

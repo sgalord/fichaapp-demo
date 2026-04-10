@@ -41,6 +41,9 @@ export async function GET(req: NextRequest) {
   const status    = searchParams.get('status')
   const dateFrom  = searchParams.get('date_from')
   const dateTo    = searchParams.get('date_to')
+  // overlap=true: devuelve ausencias que se solapan con el rango [date_from, date_to]
+  // útil para asignaciones (detectar vacaciones en una semana)
+  const overlap   = searchParams.get('overlap') === 'true'
 
   const admin = await createAdminClient()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -51,8 +54,14 @@ export async function GET(req: NextRequest) {
 
   if (workerId) q = q.eq('worker_id', workerId)
   if (status)   q = q.eq('status', status)
-  if (dateFrom) q = q.gte('date_from', dateFrom)
-  if (dateTo)   q = q.lte('date_to', dateTo)
+
+  if (overlap && dateFrom && dateTo) {
+    // Solapamiento: date_from <= dateTo AND date_to >= dateFrom
+    q = q.lte('date_from', dateTo).gte('date_to', dateFrom)
+  } else {
+    if (dateFrom) q = q.gte('date_from', dateFrom)
+    if (dateTo)   q = q.lte('date_to', dateTo)
+  }
 
   const { data, error } = await q
   if (error) return NextResponse.json({ error: 'Error al obtener ausencias' }, { status: 500 })

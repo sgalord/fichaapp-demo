@@ -6,15 +6,16 @@ import { formatTime, formatDate, distanceLabel, todayISO, initials, avatarColor 
 import type { CheckIn, DailySummary, Profile } from '@/types'
 import {
   Users, CheckCircle2, Clock, XCircle, AlertTriangle,
-  MapPin, RefreshCw, Loader2, ArrowRight, Bell, TrendingUp,
+  MapPin, RefreshCw, Loader2, ArrowRight, Bell, TrendingUp, CalendarOff,
 } from 'lucide-react'
 import Link from 'next/link'
 
 interface WorkerStatus {
-  profile: Pick<Profile, 'id' | 'full_name' | 'avatar_url'>
-  lastIn:  CheckIn | null
-  lastOut: CheckIn | null
-  status:  'in' | 'out' | 'absent' | 'rest'
+  profile:     Pick<Profile, 'id' | 'full_name' | 'avatar_url'>
+  lastIn:      CheckIn | null
+  lastOut:     CheckIn | null
+  status:      'in' | 'out' | 'absent' | 'pending' | 'on_leave'
+  absenceType?: string   // tipo de ausencia aprobada hoy (si aplica)
 }
 
 interface Notification {
@@ -52,18 +53,28 @@ export default function AdminDashboard() {
       .gte('timestamp', `${todayISO()}T00:00:00`)
       .order('timestamp', { ascending: false })
 
-    // Calcular qué trabajadores tienen obra asignada hoy (sistema obra_assignments)
     const today = todayISO()
-    const obraRes = await fetch(`/api/obra-assignments?date=${today}`)
-    const obraData = obraRes.ok ? (await obraRes.json()).data ?? [] : []
-    const withLocationToday = new Set<string>(
+    const [obraRes, absenceRes] = await Promise.all([
+      fetch(`/api/obra-assignments?date=${today}`),
+      fetch(`/api/absences?status=approved&overlap=true&date_from=${today}&date_to=${today}`),
+    ])
+    const obraData    = obraRes.ok    ? (await obraRes.json()).data    ?? [] : []
+    const absenceData = absenceRes.ok ? (await absenceRes.json()).data ?? [] : []
+
+    const withObraToday = new Set<string>(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (obraData as any[]).map((a: any) => a.worker_id).filter(Boolean)
+    )
+    // Mapa worker_id → tipo de ausencia aprobada hoy
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const absenceToday = new Map<string, string>(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (absenceData as any[]).map((a: any) => [a.worker_id, a.type])
     )
 
     const statusMap: Record<string, WorkerStatus> = {}
     for (const p of (profiles ?? []) as Pick<Profile, 'id' | 'full_name' | 'avatar_url'>[]) {
-      statusMap[p.id] = { profile: p, lastIn: null, lastOut: null, status: 'absent' }
+      statusMap[p.id] = { profile: p, lastIn: null, lastOut: null, status: 'pending' }
     }
     for (const ci of ((todayCheckIns ?? []) as CheckIn[])) {
       const ws = statusMap[ci.worker_id]
@@ -72,10 +83,18 @@ export default function AdminDashboard() {
       if (ci.type === 'out' && !ws.lastOut) ws.lastOut = ci
     }
     for (const ws of Object.values(statusMap)) {
-      if (ws.lastIn && ws.lastOut)                ws.status = 'out'
-      else if (ws.lastIn)                         ws.status = 'in'
-      else if (!withLocationToday.has(ws.profile.id)) ws.status = 'rest'
-      // else: tiene obra hoy pero no ha fichado → status permanece 'absent'
+      if (ws.lastIn && ws.lastOut) {
+        ws.status = 'out'
+      } else if (ws.lastIn) {
+        ws.status = 'in'
+      } else if (absenceToday.has(ws.profile.id)) {
+        ws.status      = 'on_leave'
+        ws.absenceType = absenceToday.get(ws.profile.id)
+      } else if (withObraToday.has(ws.profile.id)) {
+        ws.status = 'absent'   // tiene obra asignada pero no ha fichado
+      } else {
+        ws.status = 'pending'  // sin obra ni ausencia → pendiente asignar
+      }
     }
 
     setSummary(sum?.[0] ?? null)
@@ -117,10 +136,11 @@ export default function AdminDashboard() {
     return () => { supabase.removeChannel(channel) }
   }, [supabase, loadDashboard])
 
-  const inWorkers     = workers.filter(w => w.status === 'in')
-  const outWorkers    = workers.filter(w => w.status === 'out')
-  const absentWorkers = workers.filter(w => w.status === 'absent')
-  const restWorkers   = workers.filter(w => w.status === 'rest')
+  const inWorkers      = workers.filter(w => w.status === 'in')
+  const outWorkers     = workers.filter(w => w.status === 'out')
+  const absentWorkers  = workers.filter(w => w.status === 'absent')
+  const pendingWorkers = workers.filter(w => w.status === 'pending')
+  const onLeaveWorkers = workers.filter(w => w.status === 'on_leave')
 
   const unreadCount = notifications.length
 
@@ -198,16 +218,6 @@ export default function AdminDashboard() {
         <KpiCard label="Han salido"         value={outWorkers.length}    icon={TrendingUp}   color="blue" />
         <KpiCard label="Sin fichar"         value={absentWorkers.length} icon={XCircle}      color="red" />
       </div>
-      {/* Chip de descanso — sin obra asignada hoy */}
-      {restWorkers.length > 0 && (
-        <div className="flex items-center gap-2 text-sm text-zinc-500">
-          <span className="badge-gray">Descanso hoy: {restWorkers.length}</span>
-          <span className="text-xs truncate hidden sm:block">
-            {restWorkers.slice(0, 4).map(w => w.profile.full_name.split(' ')[0]).join(', ')}
-            {restWorkers.length > 4 ? ` +${restWorkers.length - 4}` : ''}
-          </span>
-        </div>
-      )}
 
       {loading && workers.length === 0 && (
         <div className="flex justify-center py-10">
@@ -267,16 +277,43 @@ export default function AdminDashboard() {
         </section>
       )}
 
-      {/* ── Descanso ── */}
-      {restWorkers.length > 0 && (
+      {/* ── De vacaciones / ausencia aprobada ── */}
+      {onLeaveWorkers.length > 0 && (
         <section className="space-y-2">
-          <p className="section-title text-zinc-500">Descanso ({restWorkers.length})</p>
+          <p className="section-title flex items-center gap-1.5 text-blue-400">
+            <CalendarOff size={12} />
+            De vacaciones / ausencia ({onLeaveWorkers.length})
+          </p>
           <div className="grid gap-2 sm:grid-cols-2">
-            {restWorkers.map(({ profile }) => (
-              <div key={profile.id} className="card flex items-center gap-3 opacity-60">
+            {onLeaveWorkers.map(({ profile, absenceType }) => (
+              <div key={profile.id} className="card flex items-center gap-3 bg-blue-500/5 border-blue-500/15">
                 <Avatar name={profile.full_name} avatarUrl={profile.avatar_url} />
-                <span className="text-sm font-medium text-zinc-400 flex-1 truncate">{profile.full_name}</span>
-                <span className="badge-gray">Descanso</span>
+                <span className="text-sm font-medium text-zinc-300 flex-1 truncate">{profile.full_name}</span>
+                <span className="badge-blue">
+                  {absenceType === 'vacation'    && 'Vacaciones'}
+                  {absenceType === 'personal_day' && 'As. propio'}
+                  {absenceType === 'sick_leave'  && 'Baja'}
+                  {absenceType === 'other'       && 'Ausente'}
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* ── Pendiente asignar obra ── */}
+      {pendingWorkers.length > 0 && (
+        <section className="space-y-2">
+          <p className="section-title flex items-center gap-1.5 text-amber-400">
+            <AlertTriangle size={12} />
+            Pendiente asignar obra ({pendingWorkers.length})
+          </p>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {pendingWorkers.map(({ profile }) => (
+              <div key={profile.id} className="card flex items-center gap-3 bg-amber-500/5 border-amber-500/15">
+                <Avatar name={profile.full_name} avatarUrl={profile.avatar_url} />
+                <span className="text-sm font-medium text-zinc-300 flex-1 truncate">{profile.full_name}</span>
+                <span className="badge-orange">Sin asignar</span>
               </div>
             ))}
           </div>
