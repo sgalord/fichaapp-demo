@@ -123,6 +123,6 @@ export async function POST(req: NextRequest) {
     .select('*, worker:profiles!worker_id(id, full_name, avatar_url)')
     .single()
 
-  if (error) return NextResponse.json({ error: 'Error al crear ausencia', detail: error.message, code: error.code }, { status: 500 })
+  if (error) return NextResponse.json({ error: 'Error al crear ausencia' }, { status: 500 })
   return NextResponse.json({ data }, { status: 201 })
 }
