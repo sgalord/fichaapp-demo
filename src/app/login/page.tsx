@@ -42,12 +42,12 @@ function LoginForm() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ username: emailToUse }),
         })
-        if (!res.ok) {
+        const json = await res.json()
+        if (!json.email) {
           setError('Usuario o contraseña incorrectos')
           setLoading(false)
           return
         }
-        const json = await res.json()
         emailToUse = json.email
       } catch {
         setError('Error de conexión. Inténtalo de nuevo.')

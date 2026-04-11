@@ -1,4 +1,5 @@
 import { createServerClient, type CookieMethodsServer } from '@supabase/ssr'
+import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 
 function makeCookieMethods(cookieStore: Awaited<ReturnType<typeof cookies>>): CookieMethodsServer {
@@ -29,11 +30,12 @@ export async function createClient() {
 }
 
 // Cliente admin — bypasea RLS, solo para API routes de administración
+// Usa createClient plano (sin SSR/cookies) porque la service role key
+// no tiene sesión de usuario — mezclarla con cookies es un antipatrón.
 export async function createAdminClient() {
-  const cookieStore = await cookies()
-  return createServerClient(
+  return createSupabaseClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    { cookies: makeCookieMethods(cookieStore) }
+    { auth: { autoRefreshToken: false, persistSession: false } }
   )
 }

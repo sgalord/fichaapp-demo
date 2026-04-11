@@ -35,13 +35,13 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (error || !data) {
-    // Respuesta genérica para no filtrar si el username existe o no
-    return NextResponse.json({ error: 'Credenciales incorrectas' }, { status: 404 })
+    // Siempre 200 — el código HTTP no debe revelar si el username existe o no
+    return NextResponse.json({ error: 'Credenciales incorrectas' }, { status: 200 })
   }
 
   const { data: authUser, error: authError } = await admin.auth.admin.getUserById(data.id)
   if (authError || !authUser?.user?.email) {
-    return NextResponse.json({ error: 'Credenciales incorrectas' }, { status: 404 })
+    return NextResponse.json({ error: 'Credenciales incorrectas' }, { status: 200 })
   }
 
   return NextResponse.json(

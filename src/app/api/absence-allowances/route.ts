@@ -65,7 +65,9 @@ export async function GET(req: NextRequest) {
     .lte('date_to',   `${year}-12-31`)
 
   function calcDays(from: string, to: string) {
-    return Math.round((new Date(to).getTime() - new Date(from).getTime()) / 86400000) + 1
+    const [fy, fm, fd] = from.split('-').map(Number)
+    const [ty, tm, td] = to.split('-').map(Number)
+    return Math.round((Date.UTC(ty, tm - 1, td) - Date.UTC(fy, fm - 1, fd)) / 86400000) + 1
   }
 
   // Construir mapa de consumidos por worker+tipo

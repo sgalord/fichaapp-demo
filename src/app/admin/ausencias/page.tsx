@@ -42,7 +42,9 @@ const STATUS_CONFIG = {
 }
 
 function dayCount(from: string, to: string) {
-  return Math.round((new Date(to).getTime() - new Date(from).getTime()) / 86400000) + 1
+  const [fy, fm, fd] = from.split('-').map(Number)
+  const [ty, tm, td] = to.split('-').map(Number)
+  return Math.round((Date.UTC(ty, tm - 1, td) - Date.UTC(fy, fm - 1, fd)) / 86400000) + 1
 }
 
 // ── Componente principal ──────────────────────────────────────────────────

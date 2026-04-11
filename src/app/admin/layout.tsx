@@ -8,7 +8,7 @@ import {
   LogOut, Users2, BarChart3, Menu, X, HardHat, CalendarDays, CalendarOff,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
 const NAV = [
   { href: '/admin',              label: 'Dashboard',    icon: LayoutDashboard },
@@ -78,6 +78,19 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const router   = useRouter()
   const supabase = createClient()
   const [drawerOpen, setDrawerOpen] = useState(false)
+
+  // Verificación de rol client-side como segunda línea de defensa
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) { router.replace('/login'); return }
+      supabase.from('profiles').select('role').eq('id', user.id).single()
+        .then(({ data: profile }) => {
+          if (!profile || !['admin', 'superadmin'].includes(profile.role)) {
+            router.replace('/worker')
+          }
+        })
+    })
+  }, [supabase, router])
 
   async function logout() {
     await supabase.auth.signOut()

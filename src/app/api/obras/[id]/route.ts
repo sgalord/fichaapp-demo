@@ -1,5 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+
+const UpdateObraSchema = z.object({
+  name:      z.string().min(1).max(200).transform(s => s.trim()).optional(),
+  address:   z.string().max(500).optional().nullable(),
+  latitude:  z.number().min(-90).max(90).optional().nullable(),
+  longitude: z.number().min(-180).max(180).optional().nullable(),
+  radius:    z.number().int().min(1).max(10000).optional(),
+  active:    z.boolean().optional(),
+})
 
 async function requireAdmin() {
   const supabase = await createClient()
@@ -15,16 +25,23 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
   const { id } = await params
-  const body = await req.json()
-  const admin = await createAdminClient()
+  const body = await req.json().catch(() => null)
+  if (!body) return NextResponse.json({ error: 'Body inválido' }, { status: 400 })
 
+  const parsed = UpdateObraSchema.safeParse(body)
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 })
+  }
+
+  const admin = await createAdminClient()
   const updates: Record<string, unknown> = {}
-  if (body.name !== undefined)      updates.name      = body.name?.trim()
-  if (body.address !== undefined)   updates.address   = body.address?.trim() || null
-  if (body.latitude !== undefined)  updates.latitude  = body.latitude
-  if (body.longitude !== undefined) updates.longitude = body.longitude
-  if (body.radius !== undefined)    updates.radius    = body.radius
-  if (body.active !== undefined)    updates.active    = body.active
+  const d = parsed.data
+  if (d.name      !== undefined) updates.name      = d.name
+  if (d.address   !== undefined) updates.address   = d.address?.trim() || null
+  if (d.latitude  !== undefined) updates.latitude  = d.latitude
+  if (d.longitude !== undefined) updates.longitude = d.longitude
+  if (d.radius    !== undefined) updates.radius    = d.radius
+  if (d.active    !== undefined) updates.active    = d.active
 
   const { data, error } = await admin.from('obras').update(updates).eq('id', id).select().single()
   if (error) return NextResponse.json({ error: 'Error al actualizar obra' }, { status: 500 })

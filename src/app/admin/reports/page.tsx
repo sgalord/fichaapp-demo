@@ -26,12 +26,17 @@ interface WorkerReport {
   absences: AbsenceSummary
 }
 
+function isoToUtc(d: string) {
+  const [y, m, day] = d.split('-').map(Number)
+  return Date.UTC(y, m - 1, day)
+}
+
 function calcAbsenceDays(from: string, to: string, rangeFrom: string, rangeTo: string): number {
-  // Intersección entre el rango del informe y los días de ausencia
-  const start = new Date(Math.max(new Date(from).getTime(), new Date(rangeFrom).getTime()))
-  const end   = new Date(Math.min(new Date(to).getTime(),   new Date(rangeTo).getTime()))
+  // Intersección entre el rango del informe y los días de ausencia (UTC para evitar DST)
+  const start = Math.max(isoToUtc(from), isoToUtc(rangeFrom))
+  const end   = Math.min(isoToUtc(to),   isoToUtc(rangeTo))
   if (end < start) return 0
-  return Math.round((end.getTime() - start.getTime()) / 86400000) + 1
+  return Math.round((end - start) / 86400000) + 1
 }
 
 export default function ReportsPage() {

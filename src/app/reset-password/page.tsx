@@ -42,8 +42,8 @@ export default function ResetPasswordPage() {
     e.preventDefault()
     setError(null)
 
-    if (password.length < 6) {
-      setError('La contraseña debe tener al menos 6 caracteres.')
+    if (password.length < 8) {
+      setError('La contraseña debe tener al menos 8 caracteres.')
       return
     }
     if (password !== confirm) {
@@ -156,9 +156,9 @@ export default function ResetPasswordPage() {
                       type={showPass ? 'text' : 'password'}
                       value={password}
                       onChange={e => setPassword(e.target.value)}
-                      placeholder="Mínimo 6 caracteres"
+                      placeholder="Mínimo 8 caracteres"
                       required
-                      minLength={6}
+                      minLength={8}
                       autoComplete="new-password"
                       className="input pr-12"
                     />

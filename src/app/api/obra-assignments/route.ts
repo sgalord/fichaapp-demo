@@ -1,5 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+
+const CreateAssignmentSchema = z.object({
+  obra_id:   z.string().uuid(),
+  date:      z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'date debe ser YYYY-MM-DD'),
+  worker_id: z.string().uuid().optional().nullable(),
+  group_id:  z.string().uuid().optional().nullable(),
+}).refine(d => d.worker_id || d.group_id, {
+  message: 'Se requiere worker_id o group_id',
+})
 
 async function getAuthUser(req?: NextRequest) {
   // Intentar autenticación por Bearer token (peticiones cliente con fetch)
@@ -63,15 +73,14 @@ export async function POST(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const force = searchParams.get('force') === '1'
 
-  const body = await req.json()
-  const { obra_id, worker_id, group_id, date } = body
+  const body = await req.json().catch(() => null)
+  if (!body) return NextResponse.json({ error: 'Body inválido' }, { status: 400 })
 
-  if (!obra_id || !date) {
-    return NextResponse.json({ error: 'obra_id y date son obligatorios' }, { status: 400 })
+  const parsed = CreateAssignmentSchema.safeParse(body)
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 })
   }
-  if (!worker_id && !group_id) {
-    return NextResponse.json({ error: 'Se requiere worker_id o group_id' }, { status: 400 })
-  }
+  const { obra_id, worker_id, group_id, date } = parsed.data
 
   const admin = await createAdminClient()
 
