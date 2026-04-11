@@ -11,7 +11,7 @@ import {
   Loader2, Check, X, Search, CalendarOff, FileText,
   ChevronDown, Clock, CheckCircle2, XCircle, Filter,
   ExternalLink, Trash2, MessageSquare, BarChart3, ListChecks,
-  Edit2, Save,
+  Edit2, Save, Plus, StickyNote,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -95,6 +95,8 @@ export default function AusenciasAdminPage() {
 // TAB: SOLICITUDES
 // ══════════════════════════════════════════════════════════════════════════
 
+interface WorkerSimple { id: string; full_name: string; avatar_url: string | null }
+
 function TabSolicitudes() {
   const supabase = createClient()
 
@@ -102,15 +104,37 @@ function TabSolicitudes() {
   const [loading, setLoading]   = useState(true)
   const [statusFilter, setStatusFilter] = useState<AbsenceStatus | 'all'>('pending')
   const [workerFilter, setWorkerFilter] = useState('')
-  const [reviewing, setReviewing] = useState<AbsenceRow | null>(null)
-  const [reviewNote, setReviewNote] = useState('')
-  const [saving, setSaving]     = useState(false)
   const [message, setMessage]   = useState<{ text: string; ok: boolean } | null>(null)
+
+  // Modal revisar
+  const [reviewing, setReviewing]   = useState<AbsenceRow | null>(null)
+  const [reviewNote, setReviewNote] = useState('')
+  const [adminNoteReview, setAdminNoteReview] = useState('')
+  const [saving, setSaving]         = useState(false)
+
+  // Nota inline (editar por fila)
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null)
+  const [inlineNote, setInlineNote]       = useState('')
+  const [savingNote, setSavingNote]       = useState(false)
+
+  // Modal crear (admin)
+  const [showCreate, setShowCreate]   = useState(false)
+  const [workers, setWorkers]         = useState<WorkerSimple[]>([])
+  const [createForm, setCreateForm]   = useState({
+    worker_id: '', type: 'vacation' as keyof typeof ABSENCE_TYPE_LABELS,
+    date_from: '', date_to: '', reason: '', admin_note: '', pre_approved: true,
+  })
+  const [creating, setCreating]       = useState(false)
+  const [createError, setCreateError] = useState('')
+
+  const getToken = useCallback(async () => {
+    const { data: { session } } = await supabase.auth.getSession()
+    return session?.access_token
+  }, [supabase])
 
   const load = useCallback(async () => {
     setLoading(true)
-    const { data: { session } } = await supabase.auth.getSession()
-    const token = session?.access_token
+    const token = await getToken()
     const params = new URLSearchParams()
     if (statusFilter !== 'all') params.set('status', statusFilter)
     const res = await fetch(`/api/absences?${params}`, {
@@ -119,49 +143,98 @@ function TabSolicitudes() {
     const json = await res.json()
     setRows((json.data ?? []) as AbsenceRow[])
     setLoading(false)
-  }, [supabase, statusFilter])
+  }, [supabase, statusFilter, getToken])
 
   useEffect(() => { load() }, [load])
 
-  const filtered = rows.filter(r =>
-    !workerFilter || r.worker?.full_name?.toLowerCase().includes(workerFilter.toLowerCase())
-  )
+  // Cargar trabajadores para el modal de crear
+  async function openCreate() {
+    if (workers.length === 0) {
+      const res = await fetch('/api/workers')
+      const json = await res.json()
+      setWorkers((json.data ?? []).filter((w: WorkerSimple & { active: boolean }) => w.active))
+    }
+    const today = new Date().toISOString().slice(0, 10)
+    setCreateForm({ worker_id: '', type: 'vacation', date_from: today, date_to: today, reason: '', admin_note: '', pre_approved: true })
+    setCreateError('')
+    setShowCreate(true)
+  }
 
-  const pendingCount = rows.filter(r => r.status === 'pending').length
+  async function submitCreate() {
+    if (!createForm.worker_id || !createForm.date_from || !createForm.date_to) {
+      setCreateError('Trabajador y fechas son obligatorios')
+      return
+    }
+    setCreating(true)
+    setCreateError('')
+    const token = await getToken()
+    const res = await fetch('/api/absences', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify({
+        worker_id:    createForm.worker_id,
+        type:         createForm.type,
+        date_from:    createForm.date_from,
+        date_to:      createForm.date_to,
+        reason:       createForm.reason || null,
+        admin_note:   createForm.admin_note || null,
+        pre_approved: createForm.pre_approved,
+      }),
+    })
+    const json = await res.json()
+    setCreating(false)
+    if (!res.ok) { setCreateError(json.error ?? 'Error al crear'); return }
+    setShowCreate(false)
+    setMessage({ text: `Ausencia creada${createForm.pre_approved ? ' y aprobada' : ''}`, ok: true })
+    await load()
+  }
 
   async function submitReview(status: 'approved' | 'rejected') {
     if (!reviewing) return
     setSaving(true)
     setMessage(null)
-    const { data: { session } } = await supabase.auth.getSession()
-    const token = session?.access_token
+    const token = await getToken()
     const res = await fetch(`/api/absences/${reviewing.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-      body: JSON.stringify({ status, review_notes: reviewNote || null }),
+      body: JSON.stringify({ status, review_notes: reviewNote || null, admin_note: adminNoteReview || null }),
     })
     const json = await res.json()
     setSaving(false)
-    if (!res.ok) {
-      setMessage({ text: json.error ?? 'Error al procesar', ok: false })
-    } else {
-      setMessage({ text: status === 'approved' ? 'Ausencia aprobada' : 'Ausencia rechazada', ok: true })
-      setReviewing(null)
-      setReviewNote('')
-      await load()
-    }
+    if (!res.ok) { setMessage({ text: json.error ?? 'Error', ok: false }); return }
+    setMessage({ text: status === 'approved' ? 'Ausencia aprobada' : 'Ausencia rechazada', ok: true })
+    setReviewing(null)
+    await load()
+  }
+
+  async function saveInlineNote(id: string) {
+    setSavingNote(true)
+    const token = await getToken()
+    await fetch(`/api/absences/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify({ admin_note: inlineNote || null }),
+    })
+    setSavingNote(false)
+    setEditingNoteId(null)
+    // Actualizar la fila localmente sin recargar todo
+    setRows(prev => prev.map(r => r.id === id ? { ...r, admin_note: inlineNote || null } : r))
   }
 
   async function deleteAbsence(id: string) {
     if (!confirm('¿Eliminar esta ausencia definitivamente?')) return
-    const { data: { session } } = await supabase.auth.getSession()
-    const token = session?.access_token
+    const token = await getToken()
     await fetch(`/api/absences/${id}`, {
       method: 'DELETE',
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     })
     await load()
   }
+
+  const filtered = rows.filter(r =>
+    !workerFilter || r.worker?.full_name?.toLowerCase().includes(workerFilter.toLowerCase())
+  )
+  const pendingCount = rows.filter(r => r.status === 'pending').length
 
   return (
     <>
@@ -178,19 +251,14 @@ function TabSolicitudes() {
         </div>
       )}
 
-      {/* Filtros */}
+      {/* Filtros + botón crear */}
       <div className="card flex flex-wrap gap-3 items-center">
         <Filter size={15} className="text-zinc-500 flex-shrink-0" />
         <div className="flex gap-1.5 flex-wrap">
           {(['all', 'pending', 'approved', 'rejected'] as const).map(s => (
-            <button
-              key={s}
-              onClick={() => setStatusFilter(s)}
-              className={cn(
-                'px-3 py-1.5 rounded-lg text-xs font-medium transition-all',
-                statusFilter === s ? 'bg-white text-zinc-950' : 'bg-zinc-800 text-zinc-400 hover:text-zinc-200'
-              )}
-            >
+            <button key={s} onClick={() => setStatusFilter(s)}
+              className={cn('px-3 py-1.5 rounded-lg text-xs font-medium transition-all',
+                statusFilter === s ? 'bg-white text-zinc-950' : 'bg-zinc-800 text-zinc-400 hover:text-zinc-200')}>
               {s === 'all' ? 'Todos' : ABSENCE_STATUS_LABELS[s]}
               {s === 'pending' && pendingCount > 0 && (
                 <span className="ml-1.5 bg-amber-500 text-white text-[10px] font-bold rounded-full w-4 h-4 inline-flex items-center justify-center">
@@ -200,19 +268,18 @@ function TabSolicitudes() {
             </button>
           ))}
         </div>
-        <div className="relative ml-auto">
+        <div className="relative">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
-          <input
-            type="text"
-            placeholder="Buscar trabajador…"
-            value={workerFilter}
-            onChange={e => setWorkerFilter(e.target.value)}
-            className="input pl-8 py-1.5 text-sm w-52"
-          />
+          <input type="text" placeholder="Buscar trabajador…" value={workerFilter}
+            onChange={e => setWorkerFilter(e.target.value)} className="input pl-8 py-1.5 text-sm w-44" />
         </div>
+        <button onClick={openCreate}
+          className="ml-auto btn-primary flex items-center gap-1.5 py-1.5 px-3 text-sm">
+          <Plus size={14} />Nueva ausencia
+        </button>
       </div>
 
-      {/* Tabla solicitudes */}
+      {/* Tabla */}
       <div className="card p-0 overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center py-16">
@@ -227,66 +294,108 @@ function TabSolicitudes() {
           <div className="divide-y divide-zinc-800">
             {filtered.map(row => (
               <div key={row.id} className={cn(
-                'px-5 py-4 flex flex-col sm:flex-row sm:items-center gap-4 hover:bg-zinc-800/30 transition-colors',
+                'px-5 py-4 flex flex-col gap-3 hover:bg-zinc-800/30 transition-colors',
                 row.status === 'pending' && 'bg-amber-500/5'
               )}>
-                {/* Trabajador */}
-                <div className="flex items-center gap-3 min-w-0 sm:w-52">
-                  <WorkerAvatar name={row.worker?.full_name ?? ''} avatar={row.worker?.avatar_url} />
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-white truncate">{row.worker?.full_name ?? '—'}</p>
-                    <p className="text-xs text-zinc-500 capitalize">{ABSENCE_TYPE_LABELS[row.type]}</p>
+                <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                  {/* Trabajador */}
+                  <div className="flex items-center gap-3 min-w-0 sm:w-52">
+                    <WorkerAvatar name={row.worker?.full_name ?? ''} avatar={row.worker?.avatar_url} />
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-white truncate">{row.worker?.full_name ?? '—'}</p>
+                      <p className="text-xs text-zinc-500 capitalize">{ABSENCE_TYPE_LABELS[row.type]}</p>
+                    </div>
                   </div>
-                </div>
 
-                {/* Fechas */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-sm font-medium text-zinc-200">{formatDate(row.date_from)}</span>
-                    {row.date_from !== row.date_to && (
-                      <><span className="text-zinc-600">→</span>
-                      <span className="text-sm font-medium text-zinc-200">{formatDate(row.date_to)}</span></>
+                  {/* Fechas + motivo */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-medium text-zinc-200">{formatDate(row.date_from)}</span>
+                      {row.date_from !== row.date_to && (
+                        <><span className="text-zinc-600">→</span>
+                        <span className="text-sm font-medium text-zinc-200">{formatDate(row.date_to)}</span></>
+                      )}
+                      <span className="badge-gray">{dayCount(row.date_from, row.date_to)} día{dayCount(row.date_from, row.date_to) > 1 ? 's' : ''}</span>
+                    </div>
+                    {row.reason && <p className="text-xs text-zinc-500 mt-1 truncate">{row.reason}</p>}
+                    {row.review_notes && row.status !== 'pending' && (
+                      <p className="text-xs text-zinc-600 mt-1 italic truncate">Revisión: {row.review_notes}</p>
                     )}
-                    <span className="badge-gray">{dayCount(row.date_from, row.date_to)} día{dayCount(row.date_from, row.date_to) > 1 ? 's' : ''}</span>
                   </div>
-                  {row.reason && <p className="text-xs text-zinc-500 mt-1 truncate">{row.reason}</p>}
-                  {row.review_notes && row.status !== 'pending' && (
-                    <p className="text-xs text-zinc-600 mt-1 italic truncate">Nota: {row.review_notes}</p>
-                  )}
+
+                  {/* Estado + acciones */}
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <span className={STATUS_CONFIG[row.status].classes}>
+                      {row.status === 'pending'  && <Clock size={10} />}
+                      {row.status === 'approved' && <CheckCircle2 size={10} />}
+                      {row.status === 'rejected' && <XCircle size={10} />}
+                      {STATUS_CONFIG[row.status].label}
+                    </span>
+                    {row.document_url && (
+                      <a href={row.document_url} target="_blank" rel="noopener noreferrer"
+                        className="p-1.5 rounded-lg text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800" title="Ver justificante">
+                        <FileText size={15} />
+                      </a>
+                    )}
+                    {row.status === 'pending' && (
+                      <button onClick={() => { setReviewing(row); setReviewNote(''); setAdminNoteReview(row.admin_note ?? '') }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-zinc-800 text-zinc-300 hover:bg-zinc-700">
+                        <MessageSquare size={12} />Revisar<ChevronDown size={11} />
+                      </button>
+                    )}
+                    {/* Botón añadir/editar nota admin */}
+                    <button
+                      onClick={() => { setEditingNoteId(row.id); setInlineNote(row.admin_note ?? '') }}
+                      className={cn('p-1.5 rounded-lg transition-colors',
+                        row.admin_note
+                          ? 'text-blue-400 hover:text-blue-300 hover:bg-zinc-800'
+                          : 'text-zinc-600 hover:text-zinc-300 hover:bg-zinc-800'
+                      )}
+                      title={row.admin_note ? 'Editar nota admin' : 'Añadir nota admin'}
+                    >
+                      <StickyNote size={15} />
+                    </button>
+                    <button onClick={() => deleteAbsence(row.id)}
+                      className="p-1.5 rounded-lg text-zinc-600 hover:text-red-400 hover:bg-zinc-800 transition-colors" title="Eliminar">
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
                 </div>
 
-                {/* Estado + acciones */}
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  <span className={STATUS_CONFIG[row.status].classes}>
-                    {row.status === 'pending'  && <Clock size={10} />}
-                    {row.status === 'approved' && <CheckCircle2 size={10} />}
-                    {row.status === 'rejected' && <XCircle size={10} />}
-                    {STATUS_CONFIG[row.status].label}
-                  </span>
-                  {row.document_url && (
-                    <a href={row.document_url} target="_blank" rel="noopener noreferrer"
-                      className="p-1.5 rounded-lg text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800" title="Ver justificante">
-                      <FileText size={15} />
-                    </a>
-                  )}
-                  {row.status === 'pending' && (
-                    <button onClick={() => { setReviewing(row); setReviewNote('') }}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-zinc-800 text-zinc-300 hover:bg-zinc-700">
-                      <MessageSquare size={12} />Revisar<ChevronDown size={11} />
+                {/* Nota admin inline — editar o mostrar */}
+                {editingNoteId === row.id ? (
+                  <div className="flex items-center gap-2 pl-0 sm:pl-[13.5rem]">
+                    <StickyNote size={13} className="text-blue-400 flex-shrink-0" />
+                    <input
+                      autoFocus
+                      type="text"
+                      value={inlineNote}
+                      onChange={e => setInlineNote(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') saveInlineNote(row.id); if (e.key === 'Escape') setEditingNoteId(null) }}
+                      placeholder="Nota interna del admin…"
+                      className="input flex-1 py-1.5 text-sm"
+                    />
+                    <button onClick={() => saveInlineNote(row.id)} disabled={savingNote}
+                      className="p-1.5 text-emerald-400 hover:text-emerald-300 rounded-lg">
+                      {savingNote ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
                     </button>
-                  )}
-                  <button onClick={() => deleteAbsence(row.id)}
-                    className="p-1.5 rounded-lg text-zinc-600 hover:text-red-400 hover:bg-zinc-800 transition-colors" title="Eliminar">
-                    <Trash2 size={15} />
-                  </button>
-                </div>
+                    <button onClick={() => setEditingNoteId(null)} className="p-1.5 text-zinc-500 hover:text-white rounded-lg">
+                      <X size={14} />
+                    </button>
+                  </div>
+                ) : row.admin_note ? (
+                  <div className="flex items-start gap-2 pl-0 sm:pl-[13.5rem]">
+                    <StickyNote size={12} className="text-blue-400 flex-shrink-0 mt-0.5" />
+                    <p className="text-xs text-blue-300/80 italic">{row.admin_note}</p>
+                  </div>
+                ) : null}
               </div>
             ))}
           </div>
         )}
       </div>
 
-      {/* Modal revisión */}
+      {/* ── Modal: revisar solicitud ── */}
       {reviewing && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 animate-fade-in">
           <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setReviewing(null)} />
@@ -306,7 +415,7 @@ function TabSolicitudes() {
               <div className="flex justify-between"><span className="text-zinc-500">Días</span><span className="text-white font-medium">{dayCount(reviewing.date_from, reviewing.date_to)}</span></div>
               {reviewing.reason && (
                 <div className="pt-2 border-t border-zinc-700">
-                  <span className="text-zinc-500 block mb-1">Motivo</span>
+                  <span className="text-zinc-500 block mb-1">Motivo del trabajador</span>
                   <span className="text-zinc-300">{reviewing.reason}</span>
                 </div>
               )}
@@ -321,9 +430,17 @@ function TabSolicitudes() {
             </div>
 
             <div>
-              <label className="section-title mb-1.5 block">Nota (opcional)</label>
+              <label className="section-title mb-1.5 block">Nota de revisión (visible para el trabajador)</label>
               <textarea value={reviewNote} onChange={e => setReviewNote(e.target.value)}
                 placeholder="Motivo de rechazo, observaciones…" rows={2} className="input w-full resize-none text-sm" />
+            </div>
+
+            <div>
+              <label className="section-title mb-1.5 block flex items-center gap-1.5">
+                <StickyNote size={12} />Nota interna admin (solo visible para admins)
+              </label>
+              <textarea value={adminNoteReview} onChange={e => setAdminNoteReview(e.target.value)}
+                placeholder="Notas internas, contexto, gestión…" rows={2} className="input w-full resize-none text-sm" />
             </div>
 
             {message && !message.ok && <p className="text-sm text-red-400">{message.text}</p>}
@@ -336,6 +453,107 @@ function TabSolicitudes() {
               <button onClick={() => submitReview('approved')} disabled={saving}
                 className="flex-1 btn-primary flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500">
                 {saving ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}Aprobar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal: crear ausencia (admin) ── */}
+      {showCreate && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 animate-fade-in">
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setShowCreate(false)} />
+          <div className="relative bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md p-6 space-y-5 animate-slide-up max-h-[90vh] overflow-y-auto">
+            <div className="flex items-start justify-between">
+              <div>
+                <h2 className="text-base font-bold text-white">Nueva ausencia</h2>
+                <p className="text-sm text-zinc-500 mt-0.5">Crear en nombre de un trabajador</p>
+              </div>
+              <button onClick={() => setShowCreate(false)} className="p-1.5 text-zinc-500 hover:text-white rounded-lg"><X size={18} /></button>
+            </div>
+
+            {/* Trabajador */}
+            <div>
+              <label className="section-title mb-1.5 block">Trabajador</label>
+              <select value={createForm.worker_id} onChange={e => setCreateForm(f => ({ ...f, worker_id: e.target.value }))}
+                className="input w-full text-sm">
+                <option value="">Seleccionar trabajador…</option>
+                {workers.map(w => <option key={w.id} value={w.id}>{w.full_name}</option>)}
+              </select>
+            </div>
+
+            {/* Tipo */}
+            <div>
+              <label className="section-title mb-2 block">Tipo</label>
+              <div className="grid grid-cols-2 gap-2">
+                {(Object.entries(ABSENCE_TYPE_LABELS) as [keyof typeof ABSENCE_TYPE_LABELS, string][]).map(([val, label]) => (
+                  <button key={val} type="button" onClick={() => setCreateForm(f => ({ ...f, type: val }))}
+                    className={cn('px-3 py-2.5 rounded-xl text-sm font-medium text-left transition-all border',
+                      createForm.type === val
+                        ? 'bg-white text-zinc-950 border-white'
+                        : 'bg-zinc-800 text-zinc-400 border-zinc-700 hover:border-zinc-600 hover:text-zinc-200'
+                    )}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Fechas */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="section-title mb-1.5 block">Desde</label>
+                <input type="date" value={createForm.date_from}
+                  onChange={e => { setCreateForm(f => ({ ...f, date_from: e.target.value, date_to: e.target.value < f.date_to ? f.date_to : e.target.value })) }}
+                  className="input w-full text-sm" required />
+              </div>
+              <div>
+                <label className="section-title mb-1.5 block">Hasta</label>
+                <input type="date" value={createForm.date_to} min={createForm.date_from}
+                  onChange={e => setCreateForm(f => ({ ...f, date_to: e.target.value }))}
+                  className="input w-full text-sm" required />
+              </div>
+            </div>
+
+            {/* Motivo */}
+            <div>
+              <label className="section-title mb-1.5 block">Motivo <span className="text-zinc-600 normal-case font-normal">(opcional)</span></label>
+              <textarea value={createForm.reason} onChange={e => setCreateForm(f => ({ ...f, reason: e.target.value }))}
+                placeholder="Descripción de la ausencia…" rows={2} className="input w-full resize-none text-sm" />
+            </div>
+
+            {/* Nota interna */}
+            <div>
+              <label className="section-title mb-1.5 block flex items-center gap-1.5">
+                <StickyNote size={12} />Nota interna admin <span className="text-zinc-600 normal-case font-normal">(solo admins)</span>
+              </label>
+              <textarea value={createForm.admin_note} onChange={e => setCreateForm(f => ({ ...f, admin_note: e.target.value }))}
+                placeholder="Contexto, notas de gestión…" rows={2} className="input w-full resize-none text-sm" />
+            </div>
+
+            {/* Aprobar directamente */}
+            <label className="flex items-center gap-3 cursor-pointer select-none">
+              <input type="checkbox" checked={createForm.pre_approved}
+                onChange={e => setCreateForm(f => ({ ...f, pre_approved: e.target.checked }))}
+                className="w-4 h-4 rounded accent-emerald-500" />
+              <div>
+                <p className="text-sm font-medium text-zinc-200">Crear como ya aprobada</p>
+                <p className="text-xs text-zinc-500">Se marcará como aprobada sin pasar por pendiente</p>
+              </div>
+            </label>
+
+            {createError && (
+              <p className="text-sm text-red-400 flex items-center gap-1.5">
+                <XCircle size={14} />{createError}
+              </p>
+            )}
+
+            <div className="flex gap-3 pt-1">
+              <button onClick={() => setShowCreate(false)} className="flex-1 btn-secondary">Cancelar</button>
+              <button onClick={submitCreate} disabled={creating || !createForm.worker_id}
+                className="flex-1 btn-primary flex items-center justify-center gap-2 disabled:opacity-40">
+                {creating ? <Loader2 size={15} className="animate-spin" /> : <Plus size={15} />}
+                {createForm.pre_approved ? 'Crear y aprobar' : 'Crear pendiente'}
               </button>
             </div>
           </div>

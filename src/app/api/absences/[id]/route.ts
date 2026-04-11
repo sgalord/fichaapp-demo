@@ -21,10 +21,11 @@ async function getAuthUser(req?: NextRequest) {
   return { user, role: profile?.role ?? 'worker' }
 }
 
-// Esquema para que el admin apruebe/rechace
+// Esquema para que el admin apruebe/rechace o añada nota
 const ReviewSchema = z.object({
-  status:       z.enum(['approved', 'rejected']),
+  status:       z.enum(['approved', 'rejected']).optional(),
   review_notes: z.string().max(500).optional().nullable(),
+  admin_note:   z.string().max(500).optional().nullable(),
 })
 
 // Esquema para que el trabajador actualice su solicitud pendiente
@@ -78,35 +79,41 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   const body = await req.json()
 
   if (isAdmin) {
-    // Admin: aprobar o rechazar
     const parsed = ReviewSchema.safeParse(body)
     if (!parsed.success) {
       return NextResponse.json({ error: parsed.error.errors[0].message }, { status: 400 })
     }
 
+    const updates: Record<string, unknown> = { updated_at: new Date().toISOString() }
+
+    // Cambio de estado (opcional — puede que solo quiera guardar una nota)
+    if (parsed.data.status) {
+      updates.status       = parsed.data.status
+      updates.reviewed_by  = auth.user.id
+      updates.reviewed_at  = new Date().toISOString()
+    }
+    if ('review_notes' in parsed.data) updates.review_notes = parsed.data.review_notes ?? null
+    if ('admin_note'   in parsed.data) updates.admin_note   = parsed.data.admin_note   ?? null
+
     const { data, error } = await adminClient
       .from('absences')
-      .update({
-        status:       parsed.data.status,
-        review_notes: parsed.data.review_notes ?? null,
-        reviewed_by:  auth.user.id,
-        reviewed_at:  new Date().toISOString(),
-        updated_at:   new Date().toISOString(),
-      })
+      .update(updates)
       .eq('id', id)
       .select('*, worker:profiles!worker_id(id, full_name, avatar_url)')
       .single()
 
     if (error) return NextResponse.json({ error: 'Error al actualizar' }, { status: 500 })
 
-    await logAudit({
-      admin_id:    auth.user.id,
-      action:      parsed.data.status === 'approved' ? 'absence_approved' : 'absence_rejected',
-      target_type: 'absence',
-      target_id:   id,
-      target_name: `${absence.type} ${absence.date_from}→${absence.date_to}`,
-      details:     { review_notes: parsed.data.review_notes },
-    })
+    if (parsed.data.status) {
+      await logAudit({
+        admin_id:    auth.user.id,
+        action:      parsed.data.status === 'approved' ? 'absence_approved' : 'absence_rejected',
+        target_type: 'absence',
+        target_id:   id,
+        target_name: `${absence.type} ${absence.date_from}→${absence.date_to}`,
+        details:     { review_notes: parsed.data.review_notes, admin_note: parsed.data.admin_note },
+      })
+    }
 
     return NextResponse.json({ data })
   }

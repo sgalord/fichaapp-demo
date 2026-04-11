@@ -21,11 +21,15 @@ async function getAuthUser(req?: NextRequest) {
 }
 
 const CreateSchema = z.object({
-  type:      z.enum(['vacation', 'personal_day', 'sick_leave', 'other']),
-  date_from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  date_to:   z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  reason:    z.string().max(500).optional().nullable(),
+  type:         z.enum(['vacation', 'personal_day', 'sick_leave', 'other']),
+  date_from:    z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  date_to:      z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  reason:       z.string().max(500).optional().nullable(),
   document_url: z.string().url().optional().nullable(),
+  // Solo admin
+  worker_id:    z.string().uuid().optional(),
+  pre_approved: z.boolean().optional(),   // si true → status='approved' directamente
+  admin_note:   z.string().max(500).optional().nullable(),
 }).refine(d => d.date_to >= d.date_from, {
   message: 'date_to debe ser igual o posterior a date_from',
 })
@@ -78,20 +82,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: parsed.error.errors[0].message }, { status: 400 })
   }
 
-  const { type, date_from, date_to, reason, document_url } = parsed.data
+  const { type, date_from, date_to, reason, document_url, pre_approved, admin_note } = parsed.data
 
-  // Quien crea la ausencia: el propio trabajador o un admin
   const isAdmin = ['admin', 'superadmin'].includes(auth.role)
-  const worker_id = isAdmin && body.worker_id ? body.worker_id : auth.user.id
+  const worker_id = isAdmin && parsed.data.worker_id ? parsed.data.worker_id : auth.user.id
 
-  // Comprobar solapamiento con ausencias ya existentes del mismo trabajador
   const adminClient = await createAdminClient()
   const { data: overlap } = await adminClient
     .from('absences')
     .select('id, date_from, date_to, status')
     .eq('worker_id', worker_id)
     .neq('status', 'rejected')
-    .or(`date_from.lte.${date_to},date_to.gte.${date_from}`)
+    .lte('date_from', date_to)
+    .gte('date_to', date_from)
 
   if (overlap && overlap.length > 0) {
     return NextResponse.json({
@@ -100,6 +103,9 @@ export async function POST(req: NextRequest) {
     }, { status: 409 })
   }
 
+  // Admin puede crear directamente aprobada
+  const status = isAdmin && pre_approved ? 'approved' : 'pending'
+
   const { data, error } = await adminClient
     .from('absences')
     .insert({
@@ -107,9 +113,12 @@ export async function POST(req: NextRequest) {
       type,
       date_from,
       date_to,
-      reason:       reason ?? null,
+      reason:       reason      ?? null,
       document_url: document_url ?? null,
-      status: 'pending',
+      admin_note:   isAdmin && admin_note ? admin_note : null,
+      status,
+      reviewed_by:  isAdmin && pre_approved ? auth.user.id  : null,
+      reviewed_at:  isAdmin && pre_approved ? new Date().toISOString() : null,
     })
     .select('*, worker:profiles!worker_id(id, full_name, avatar_url)')
     .single()

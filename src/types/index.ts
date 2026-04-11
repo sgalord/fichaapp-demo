@@ -124,6 +124,7 @@ export interface Absence {
   reviewed_by: string | null
   reviewed_at: string | null
   review_notes: string | null
+  admin_note: string | null
   created_at: string
   updated_at: string
   // Joins
