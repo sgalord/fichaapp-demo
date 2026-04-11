@@ -150,7 +150,7 @@ function WorkerChip({
       <span className={`text-xs leading-tight ${onLeave ? 'text-zinc-400' : 'text-zinc-200'}`}>
         {worker.full_name.split(' ')[0]} {worker.full_name.split(' ')[1] ?? ''}
       </span>
-      {onLeave && <CalendarOff size={10} className="text-amber-400 flex-shrink-0" title="Ausencia aprobada" />}
+      {onLeave && <span title="Ausencia aprobada"><CalendarOff size={10} className="text-amber-400 flex-shrink-0" /></span>}
       {onDelete && (
         <button
           onClick={e => { e.stopPropagation(); onDelete() }}
