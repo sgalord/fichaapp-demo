@@ -34,8 +34,11 @@ export type AuditAction =
   | 'create_obra'
   | 'update_obra'
   | 'delete_obra'
+  | 'absence_approved'
+  | 'absence_rejected'
+  | 'absence_deleted'
 
-export type AuditTargetType = 'worker' | 'checkin' | 'obra' | 'import'
+export type AuditTargetType = 'worker' | 'checkin' | 'obra' | 'import' | 'absence'
 
 export interface AuditEntry {
   adminId: string

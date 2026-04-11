@@ -81,7 +81,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   if (isAdmin) {
     const parsed = ReviewSchema.safeParse(body)
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error.errors[0].message }, { status: 400 })
+      return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 })
     }
 
     const updates: Record<string, unknown> = { updated_at: new Date().toISOString() }
@@ -106,12 +106,12 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
     if (parsed.data.status) {
       await logAudit({
-        admin_id:    auth.user.id,
-        action:      parsed.data.status === 'approved' ? 'absence_approved' : 'absence_rejected',
-        target_type: 'absence',
-        target_id:   id,
-        target_name: `${absence.type} ${absence.date_from}→${absence.date_to}`,
-        details:     { review_notes: parsed.data.review_notes, admin_note: parsed.data.admin_note },
+        adminId:    auth.user.id,
+        action:     parsed.data.status === 'approved' ? 'absence_approved' : 'absence_rejected',
+        targetType: 'absence',
+        targetId:   id,
+        targetName: `${absence.type} ${absence.date_from}→${absence.date_to}`,
+        details:    { review_notes: parsed.data.review_notes, admin_note: parsed.data.admin_note },
       })
     }
 
@@ -128,7 +128,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
   const parsed = WorkerUpdateSchema.safeParse(body)
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.errors[0].message }, { status: 400 })
+    return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 })
   }
 
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() }
@@ -187,11 +187,11 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
 
   if (isAdmin) {
     await logAudit({
-      admin_id:    auth.user.id,
-      action:      'absence_deleted',
-      target_type: 'absence',
-      target_id:   id,
-      target_name: `${absence.type} ${absence.date_from}→${absence.date_to}`,
+      adminId:    auth.user.id,
+      action:     'absence_deleted',
+      targetType: 'absence',
+      targetId:   id,
+      targetName: `${absence.type} ${absence.date_from}→${absence.date_to}`,
     })
   }
 
