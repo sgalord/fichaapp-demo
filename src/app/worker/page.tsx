@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import {
   haversineDistance, formatTime, formatDate, distanceLabel,
-  todayISO, tomorrowISO, mapsUrl,
+  todayISO, mapsUrl,
 } from '@/lib/utils'
 import { getWorkerObras } from './actions'
 import { getDeviceFingerprint } from '@/lib/device-fingerprint'
@@ -96,10 +96,8 @@ export default function WorkerPage() {
     setTodayCheckIns((checkIns ?? []) as CheckIn[])
 
     // Obtener obra de hoy y mañana via Server Action
-    // (corre en servidor con admin client → bypasea RLS por completo)
-    const today    = todayISO()
-    const tomorrow = tomorrowISO()
-    const { todayObra, tomorrowObra } = await getWorkerObras(user.id, today, tomorrow)
+    // (corre en servidor — el userId lo obtiene internamente desde la sesión)
+    const { todayObra, tomorrowObra } = await getWorkerObras()
 
     setTodayObra(todayObra)
     setTomorrowObra(tomorrowObra)

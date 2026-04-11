@@ -1,6 +1,35 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createServerClient } from '@supabase/ssr'
 
 export const runtime = 'edge'
+
+async function isAuthenticated(request: NextRequest): Promise<boolean> {
+  // Intentar con Bearer token primero (clientes que lo envían explícitamente)
+  const authHeader = request.headers.get('authorization') ?? ''
+  if (authHeader.startsWith('Bearer ')) {
+    const token = authHeader.slice(7)
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      { cookies: { getAll: () => [], setAll: () => {} } }
+    )
+    const { data: { user } } = await supabase.auth.getUser(token)
+    return !!user
+  }
+  // Fallback: cookies de sesión SSR
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll: () => request.cookies.getAll(),
+        setAll: () => {},
+      },
+    }
+  )
+  const { data: { user } } = await supabase.auth.getUser()
+  return !!user
+}
 
 interface NominatimResult {
   lat: string
@@ -35,6 +64,10 @@ function buildLabel(result: NominatimResult): string {
 }
 
 export async function GET(request: NextRequest) {
+  if (!await isAuthenticated(request)) {
+    return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+  }
+
   const { searchParams } = new URL(request.url)
   const address = searchParams.get('address') ?? searchParams.get('q') ?? ''
 

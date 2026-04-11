@@ -19,7 +19,7 @@ async function requireAdmin(supabase: Awaited<ReturnType<typeof createClient>>) 
   if (!user) return null
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
   if (!['admin', 'superadmin'].includes(profile?.role ?? '')) return null
-  return user
+  return { user, role: profile!.role as string }
 }
 
 // GET — devuelve email del trabajador (requiere admin)
@@ -29,8 +29,9 @@ export async function GET(
 ) {
   const { id } = await params
   const supabase = await createClient()
-  const user = await requireAdmin(supabase)
-  if (!user) return NextResponse.json({ error: 'Acceso denegado' }, { status: 403 })
+  const auth = await requireAdmin(supabase)
+  if (!auth) return NextResponse.json({ error: 'Acceso denegado' }, { status: 403 })
+  const { user } = auth
 
   const admin = await createAdminClient()
   const { data: authUser, error } = await admin.auth.admin.getUserById(id)
@@ -46,8 +47,9 @@ export async function PUT(
 ) {
   const { id } = await params
   const supabase = await createClient()
-  const user = await requireAdmin(supabase)
-  if (!user) return NextResponse.json({ error: 'Acceso denegado' }, { status: 403 })
+  const auth = await requireAdmin(supabase)
+  if (!auth) return NextResponse.json({ error: 'Acceso denegado' }, { status: 403 })
+  const { user, role: callerRole } = auth
 
   const body = await req.json().catch(() => null)
   if (!body) return NextResponse.json({ error: 'Body inválido' }, { status: 400 })
@@ -59,6 +61,11 @@ export async function PUT(
   }
 
   const { full_name, email, phone, role, active, group_ids, password, username } = parsed.data
+
+  // Solo superadmin puede asignar el rol superadmin
+  if (role === 'superadmin' && callerRole !== 'superadmin') {
+    return NextResponse.json({ error: 'Solo un superadmin puede asignar ese rol' }, { status: 403 })
+  }
   const admin = await createAdminClient()
 
   // Obtener nombre actual para el log

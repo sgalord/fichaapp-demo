@@ -1,6 +1,8 @@
 'use server'
 
 import { createClient } from '@supabase/supabase-js'
+import { createClient as createServerClient } from '@/lib/supabase/server'
+import { todayISO, tomorrowISO } from '@/lib/utils'
 
 export interface ObraInfo {
   id: string
@@ -20,43 +22,42 @@ function getAdminClient() {
 }
 
 /**
- * Obtiene las obras asignadas al trabajador para hoy y mañana.
- * Usa @supabase/supabase-js con service role → bypass total de RLS.
- * El userId viene verificado desde el cliente (supabase.auth.getUser()).
+ * Obtiene las obras asignadas al trabajador autenticado para hoy y mañana.
+ * El userId se obtiene desde la sesión del servidor — nunca del cliente.
  */
-export async function getWorkerObras(
-  userId: string,
-  today: string,
-  tomorrow: string
-): Promise<{ todayObra: ObraInfo | null; tomorrowObra: ObraInfo | null }> {
-  if (!userId) return { todayObra: null, tomorrowObra: null }
+export async function getWorkerObras(): Promise<{
+  todayObra: ObraInfo | null
+  tomorrowObra: ObraInfo | null
+}> {
+  // Obtener el usuario desde la sesión del servidor (no del cliente)
+  const supabase = await createServerClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { todayObra: null, tomorrowObra: null }
 
-  const admin = getAdminClient()
+  const today    = todayISO()
+  const tomorrow = tomorrowISO()
+  const admin    = getAdminClient()
 
   const [
-    { data: todayData, error: e1 },
+    { data: todayData,    error: e1 },
     { data: tomorrowData, error: e2 },
   ] = await Promise.all([
     admin
       .from('obra_assignments')
       .select('obra:obras(id,name,address,latitude,longitude,radius)')
-      .eq('worker_id', userId)
+      .eq('worker_id', user.id)
       .eq('date', today)
       .limit(1),
     admin
       .from('obra_assignments')
       .select('obra:obras(id,name,address,latitude,longitude,radius)')
-      .eq('worker_id', userId)
+      .eq('worker_id', user.id)
       .eq('date', tomorrow)
       .limit(1),
   ])
 
-  if (e1) console.error('[getWorkerObras] today error:', e1)
-  if (e2) console.error('[getWorkerObras] tomorrow error:', e2)
-
-  console.log('[getWorkerObras] userId:', userId, 'today:', today, 'tomorrow:', tomorrow)
-  console.log('[getWorkerObras] todayData:', JSON.stringify(todayData))
-  console.log('[getWorkerObras] tomorrowData:', JSON.stringify(tomorrowData))
+  if (e1) console.error('[getWorkerObras] today error:', e1.message)
+  if (e2) console.error('[getWorkerObras] tomorrow error:', e2.message)
 
   return {
     todayObra:    (todayData as any)?.[0]?.obra    ?? null,
