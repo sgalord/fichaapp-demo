@@ -34,8 +34,10 @@ Usar Desktop Commander `start_process` con `cmd.exe`, luego `interact_with_proce
 /admin/obras        → CRUD obras (centros de trabajo permanentes)
 /admin/asignaciones → asignar trabajadores a obras por día/semana
 /admin/checkins     → historial fichajes + detección fraude dispositivo
+/admin/ausencias    → gestión de ausencias/vacaciones (aprobar/rechazar)
 /admin/groups       → grupos de trabajadores
 /admin/reports      → informes
+/worker/ausencias   → solicitar y ver ausencias (trabajador)
 /admin/import       → importar 20 trabajadores desde Excel (un clic)
 /forgot-password    → recuperar contraseña
 /reset-password     → nueva contraseña (PKCE flow)
@@ -60,6 +62,11 @@ POST /api/obra-assignments       → crear asignación (detecta conflicto, ?forc
 DELETE /api/obra-assignments/[id]
 GET  /api/admin/import-workers   → preview de los 20 trabajadores a importar
 POST /api/admin/import-workers   → ejecuta la importación (crea users + obras)
+GET  /api/absences               → lista ausencias (workers: solo las suyas; admins: todas + filtros status/date)
+POST /api/absences               → crear solicitud de ausencia (detecta solapamiento)
+GET/PUT/DELETE /api/absences/[id] → ver/aprobar-rechazar/eliminar ausencia
+GET  /api/absence-allowances?year → saldo vacaciones+asuntos propios por trabajador (calculado)
+PUT  /api/absence-allowances     → upsert días asignados a un trabajador para un año
 GET  /api/geocode?address=...    → geocodificación de dirección
 GET/POST /api/locations          → ubicaciones legacy (sistema antiguo)
 GET/PUT/DELETE /api/locations/[id]
@@ -106,6 +113,42 @@ latitude, longitude, radius INTEGER, active BOOLEAN, created_by UUID
 ## Storage buckets
 - `checkin-photos` → fotos de fichajes (`{worker_id}/{timestamp}.jpg`)
 - `avatars` → fotos de perfil (`{worker_id}/avatar.jpg`, siempre upsert:true)
+- `absence-documents` → justificantes de ausencias (`{worker_id}/{timestamp}.{ext}`, privado, max 10 MB)
+
+## Módulo de Ausencias (feature/absences-management)
+### Tablas
+```sql
+-- absences: solicitudes de ausencia
+id, worker_id, type (vacation|personal_day|sick_leave|other),
+date_from, date_to, reason, document_url, status (pending|approved|rejected),
+reviewed_by, reviewed_at, review_notes, created_at, updated_at
+
+-- absence_allowances: días disponibles por trabajador/año
+id, worker_id, year, vacation_days (default 22), personal_days (default 6)
+UNIQUE(worker_id, year)
+```
+### Columnas adicionales en absences
+- `admin_note TEXT` — nota interna del admin, **nunca visible para el trabajador**
+- `review_notes TEXT` — nota de revisión visible para el trabajador
+
+### Páginas
+- `/admin/ausencias` → 2 tabs: Solicitudes + Gestión de días libres (editable)
+  - Botón "Nueva ausencia": admin crea en nombre de cualquier trabajador
+  - `pre_approved=true` → se crea directamente como `status='approved'`
+  - Icono StickyNote por fila → edición inline de admin_note sin recargar
+  - Modal Revisar: dos campos separados (review_notes para trabajador, admin_note interno)
+- `/worker/ausencias` → ver y solicitar ausencias, subir justificante
+### API absences
+- POST acepta `worker_id?` (admin), `pre_approved?` (bool), `admin_note?` (interno)
+- PUT `status` es **opcional** — se puede actualizar solo admin_note sin cambiar estado
+- PUT solo actualiza `reviewed_by/reviewed_at` cuando se proporciona `status`
+### Lógica saldos
+- GET /api/absence-allowances calcula en tiempo real: total (de allowances o default) - consumido (absences aprobadas del año)
+- Defaults: 22 días vacaciones, 6 días asuntos propios
+- Admin puede editar el total por trabajador/año desde la tab Saldos
+### Informes
+- /admin/reports ahora incluye columnas: Vacaciones, As. propios, Bajas, Otras ausencias
+- Excel exporta 3 hojas: Resumen, Fichajes, Ausencias
 
 ## Patrones importantes
 - **upsert:true** siempre en uploads de avatars (evita error "file already exists")
@@ -172,6 +215,10 @@ ON public.obra_assignments FOR ALL TO authenticated
 USING (
   EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin','superadmin'))
 );
+
+-- ⚠️ PENDIENTE CRÍTICO: ausencias (ejecutar migrations/absences.sql en Supabase SQL Editor)
+-- Crea tabla absences + RLS policies + storage bucket absence-documents
+-- Ver archivo completo en: migrations/absences.sql
 
 -- audit_logs (PENDIENTE de ejecutar en Supabase)
 CREATE TABLE IF NOT EXISTS audit_logs (

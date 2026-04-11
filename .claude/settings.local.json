@@ -39,7 +39,10 @@
       "Bash(rm src/app/api/admin/import-workers/route.ts)",
       "Bash(rmdir src/app/admin/import)",
       "Bash(rmdir src/app/api/admin/import-workers)",
-      "Bash(rmdir src/app/api/admin)"
+      "Bash(rmdir src/app/api/admin)",
+      "Bash(grep -r \"vercel.app\\\\|fichaapp\" .env*)",
+      "mcp__101489dc-fe8c-44de-b4df-8fc11bc0ffc9__apply_migration",
+      "Bash(node \"C:\\\\Program Files\\\\nodejs\\\\node_modules\\\\npm\\\\bin\\\\npm-cli.js\" run dev)"
     ]
   }
 }

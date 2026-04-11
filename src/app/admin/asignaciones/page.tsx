@@ -5,7 +5,7 @@ import type { Obra, Profile, ObraAssignment } from '@/types'
 import {
   Plus, ChevronLeft, ChevronRight, Loader2, X, AlertTriangle,
   HardHat, User, Trash2, CalendarDays, Users, LayoutGrid, List,
-  ChevronDown, GripVertical,
+  ChevronDown, GripVertical, CalendarOff,
 } from 'lucide-react'
 import { initials, avatarColor } from '@/lib/utils'
 
@@ -39,10 +39,12 @@ function WorkerMultiSelect({
   workers,
   selectedIds,
   onChange,
+  absenceOnDate,
 }: {
   workers: Profile[]
   selectedIds: string[]
   onChange: (ids: string[]) => void
+  absenceOnDate: (workerId: string) => string | null
 }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -65,6 +67,10 @@ function WorkerMultiSelect({
       ? workers.find(w => w.id === selectedIds[0])?.full_name ?? '1 trabajador'
       : `${selectedIds.length} trabajadores seleccionados`
 
+  const ABSENCE_LABELS: Record<string, string> = {
+    vacation: 'Vacaciones', personal_day: 'As. propio', sick_leave: 'Baja', other: 'Ausente',
+  }
+
   return (
     <div ref={ref} className="relative">
       <button
@@ -78,23 +84,31 @@ function WorkerMultiSelect({
 
       {open && (
         <div className="absolute top-full left-0 right-0 mt-1 bg-zinc-800 border border-zinc-700 rounded-xl shadow-2xl z-20 max-h-52 overflow-y-auto">
-          {workers.map(w => (
-            <label
-              key={w.id}
-              className="flex items-center gap-3 px-3 py-2.5 hover:bg-zinc-700 cursor-pointer transition-colors first:rounded-t-xl last:rounded-b-xl"
-            >
-              <input
-                type="checkbox"
-                checked={selectedIds.includes(w.id)}
-                onChange={() => toggle(w.id)}
-                className="accent-white w-3.5 h-3.5 flex-shrink-0"
-              />
-              <div className={`${avatarColor(w.full_name)} w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0`}>
-                {initials(w.full_name)}
-              </div>
-              <span className="text-sm text-zinc-200 truncate">{w.full_name}</span>
-            </label>
-          ))}
+          {workers.map(w => {
+            const absence = absenceOnDate(w.id)
+            return (
+              <label
+                key={w.id}
+                className="flex items-center gap-3 px-3 py-2.5 hover:bg-zinc-700 cursor-pointer transition-colors first:rounded-t-xl last:rounded-b-xl"
+              >
+                <input
+                  type="checkbox"
+                  checked={selectedIds.includes(w.id)}
+                  onChange={() => toggle(w.id)}
+                  className="accent-white w-3.5 h-3.5 flex-shrink-0"
+                />
+                <div className={`${avatarColor(w.full_name)} w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0`}>
+                  {initials(w.full_name)}
+                </div>
+                <span className={`text-sm truncate flex-1 ${absence ? 'text-zinc-500' : 'text-zinc-200'}`}>{w.full_name}</span>
+                {absence && (
+                  <span className="flex items-center gap-1 text-[10px] font-medium text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-full px-2 py-0.5 flex-shrink-0">
+                    <CalendarOff size={9} />{ABSENCE_LABELS[absence] ?? 'Ausente'}
+                  </span>
+                )}
+              </label>
+            )
+          })}
         </div>
       )}
     </div>
@@ -109,6 +123,7 @@ function WorkerChip({
   onDelete,
   onDragStart,
   isDragging,
+  onLeave,
 }: {
   worker: Profile
   assignmentId: string | null
@@ -116,18 +131,26 @@ function WorkerChip({
   onDelete?: () => void
   onDragStart: (workerId: string, workerName: string, fromObraId: string | null, assignmentId: string | null) => void
   isDragging?: boolean
+  onLeave?: string | null   // tipo de ausencia aprobada, si existe
 }) {
   return (
     <div
       draggable
       onDragStart={() => onDragStart(worker.id, worker.full_name, obraId, assignmentId)}
-      className={`flex items-center gap-1.5 bg-zinc-700/70 border border-zinc-600/50 rounded-lg px-2 py-1.5 cursor-grab active:cursor-grabbing select-none transition-opacity ${isDragging ? 'opacity-40' : 'hover:bg-zinc-600/70'}`}
+      className={`flex items-center gap-1.5 rounded-lg px-2 py-1.5 cursor-grab active:cursor-grabbing select-none transition-opacity border ${
+        onLeave
+          ? 'bg-amber-500/10 border-amber-500/25'
+          : 'bg-zinc-700/70 border-zinc-600/50 hover:bg-zinc-600/70'
+      } ${isDragging ? 'opacity-40' : ''}`}
     >
       <GripVertical size={10} className="text-zinc-500 flex-shrink-0" />
       <div className={`${avatarColor(worker.full_name)} w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0`}>
         {initials(worker.full_name)}
       </div>
-      <span className="text-xs text-zinc-200 leading-tight">{worker.full_name.split(' ')[0]} {worker.full_name.split(' ')[1] ?? ''}</span>
+      <span className={`text-xs leading-tight ${onLeave ? 'text-zinc-400' : 'text-zinc-200'}`}>
+        {worker.full_name.split(' ')[0]} {worker.full_name.split(' ')[1] ?? ''}
+      </span>
+      {onLeave && <CalendarOff size={10} className="text-amber-400 flex-shrink-0" title="Ausencia aprobada" />}
       {onDelete && (
         <button
           onClick={e => { e.stopPropagation(); onDelete() }}
@@ -146,6 +169,7 @@ export default function AsignacionesPage() {
   const [obras, setObras]             = useState<Obra[]>([])
   const [workers, setWorkers]         = useState<Profile[]>([])
   const [assignments, setAssignments] = useState<AssignWithJoins[]>([])
+  const [absences, setAbsences]       = useState<{worker_id: string; type: string; date_from: string; date_to: string}[]>([])
   const [loading, setLoading]         = useState(true)
   const [showModal, setShowModal]     = useState(false)
   const [saving, setSaving]           = useState(false)
@@ -177,15 +201,17 @@ export default function AsignacionesPage() {
 
   const loadData = useCallback(async () => {
     setLoading(true)
-    const [obrasRes, workersRes, assignRes] = await Promise.all([
+    const [obrasRes, workersRes, assignRes, absenceRes] = await Promise.all([
       fetch('/api/obras'),
       fetch('/api/workers'),
       fetch(`/api/obra-assignments?date_from=${weekDays[0]}&date_to=${weekDays[6]}`),
+      fetch(`/api/absences?status=approved&overlap=true&date_from=${weekDays[0]}&date_to=${weekDays[6]}`),
     ])
 
-    if (obrasRes.ok)   { const { data } = await obrasRes.json();   setObras(data ?? []) }
-    if (workersRes.ok) { const { data } = await workersRes.json(); setWorkers((data ?? []).filter((w: Profile) => w.active)) }
-    if (assignRes.ok)  { const { data } = await assignRes.json();  setAssignments(data ?? []) }
+    if (obrasRes.ok)    { const { data } = await obrasRes.json();    setObras(data ?? []) }
+    if (workersRes.ok)  { const { data } = await workersRes.json();  setWorkers((data ?? []).filter((w: Profile) => w.active)) }
+    if (assignRes.ok)   { const { data } = await assignRes.json();   setAssignments(data ?? []) }
+    if (absenceRes.ok)  { const { data } = await absenceRes.json();  setAbsences(data ?? []) }
     setLoading(false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [weekDate])
@@ -348,6 +374,14 @@ export default function AsignacionesPage() {
 
   const activeObras = obras.filter(o => o.active)
 
+  // Devuelve el tipo de ausencia aprobada de un trabajador en una fecha dada, o null
+  function absenceOnDate(workerId: string, date: string): string | null {
+    const a = absences.find(
+      ab => ab.worker_id === workerId && ab.date_from <= date && ab.date_to >= date
+    )
+    return a?.type ?? null
+  }
+
   return (
     <div className="space-y-5 animate-fade-in">
       {/* ── Header ── */}
@@ -424,6 +458,26 @@ export default function AsignacionesPage() {
                     <Plus size={14} />
                   </button>
                 </div>
+
+                {/* Ausencias aprobadas ese día */}
+                {(() => {
+                  const dayAbsences = absences.filter(a => a.date_from <= date && a.date_to >= date)
+                  if (dayAbsences.length === 0) return null
+                  return (
+                    <div className="flex flex-wrap gap-1.5 mb-2">
+                      {dayAbsences.map(a => {
+                        const w = workers.find(w => w.id === a.worker_id)
+                        if (!w) return null
+                        const label = a.type === 'vacation' ? 'Vac.' : a.type === 'personal_day' ? 'As.p.' : a.type === 'sick_leave' ? 'Baja' : 'Aus.'
+                        return (
+                          <span key={a.worker_id} className="flex items-center gap-1 text-[10px] text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-full px-2 py-0.5">
+                            <CalendarOff size={9} />{w.full_name.split(' ')[0]} · {label}
+                          </span>
+                        )
+                      })}
+                    </div>
+                  )
+                })()}
 
                 {dayAssignments.length === 0 ? (
                   <p className="text-xs text-zinc-600 py-1">Sin asignaciones</p>
@@ -558,6 +612,7 @@ export default function AsignacionesPage() {
                       obraId={null}
                       onDragStart={handleDragStart}
                       isDragging={dragWorker?.workerId === w.id}
+                      onLeave={absenceOnDate(w.id, boardDay)}
                     />
                   ))
                 )}
@@ -602,6 +657,7 @@ export default function AsignacionesPage() {
                           onDelete={() => handleDelete(assignment.id)}
                           onDragStart={handleDragStart}
                           isDragging={dragWorker?.workerId === worker.id}
+                          onLeave={absenceOnDate(worker.id, boardDay)}
                         />
                       ))
                     )}
@@ -679,6 +735,7 @@ export default function AsignacionesPage() {
                     workers={workers}
                     selectedIds={selectedWorkerIds}
                     onChange={setSelectedWorkerIds}
+                    absenceOnDate={(id) => absenceOnDate(id, form.date)}
                   />
                 )}
 

@@ -12,7 +12,7 @@ import type { Profile, CheckIn } from '@/types'
 import {
   MapPin, Clock, CheckCircle2, XCircle, LogOut,
   Navigation, AlertTriangle, ChevronRight, Loader2, RefreshCw,
-  Camera, X, Image, UserCircle, HardHat, CalendarDays,
+  Camera, X, Image, UserCircle, HardHat, CalendarDays, CalendarOff,
 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -581,6 +581,13 @@ export default function WorkerPage() {
           <div className="flex items-center gap-2.5">
             <Clock size={16} className="text-zinc-500" />
             <span className="text-sm font-medium text-zinc-400">Ver historial completo</span>
+          </div>
+          <ChevronRight size={16} className="text-zinc-600" />
+        </Link>
+        <Link href="/worker/ausencias" className="card-hover flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <CalendarOff size={16} className="text-amber-500/70" />
+            <span className="text-sm font-medium text-zinc-400">Ausencias y vacaciones</span>
           </div>
           <ChevronRight size={16} className="text-zinc-600" />
         </Link>
