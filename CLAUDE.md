@@ -127,9 +127,21 @@ reviewed_by, reviewed_at, review_notes, created_at, updated_at
 id, worker_id, year, vacation_days (default 22), personal_days (default 6)
 UNIQUE(worker_id, year)
 ```
+### Columnas adicionales en absences
+- `admin_note TEXT` — nota interna del admin, **nunca visible para el trabajador**
+- `review_notes TEXT` — nota de revisión visible para el trabajador
+
 ### Páginas
-- `/admin/ausencias` → 2 tabs: Solicitudes (aprobar/rechazar) + Saldos por trabajador (editable)
+- `/admin/ausencias` → 2 tabs: Solicitudes + Gestión de días libres (editable)
+  - Botón "Nueva ausencia": admin crea en nombre de cualquier trabajador
+  - `pre_approved=true` → se crea directamente como `status='approved'`
+  - Icono StickyNote por fila → edición inline de admin_note sin recargar
+  - Modal Revisar: dos campos separados (review_notes para trabajador, admin_note interno)
 - `/worker/ausencias` → ver y solicitar ausencias, subir justificante
+### API absences
+- POST acepta `worker_id?` (admin), `pre_approved?` (bool), `admin_note?` (interno)
+- PUT `status` es **opcional** — se puede actualizar solo admin_note sin cambiar estado
+- PUT solo actualiza `reviewed_by/reviewed_at` cuando se proporciona `status`
 ### Lógica saldos
 - GET /api/absence-allowances calcula en tiempo real: total (de allowances o default) - consumido (absences aprobadas del año)
 - Defaults: 22 días vacaciones, 6 días asuntos propios
