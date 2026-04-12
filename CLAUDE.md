@@ -202,40 +202,36 @@ david, cesar, tacuru, andres, alex, samuel, candido.gonzalez, yohan.fonseca, ign
 ## Obras del Excel
 AGUILERA, ESTETICA, PARDILLO, COLLADO, PALANCA, SILICEO, SANTA ENGRACIA, CHULENGO
 
-## SQL ejecutado en Supabase (acumulado)
+## Estado de la BD (verificado 2026-04-12)
+Todas las tablas y funciones necesarias están desplegadas en producción:
+- `profiles`, `obras`, `obra_assignments`, `check_ins`, `work_locations`, `location_assignments`
+- `groups`, `user_groups`
+- `absences`, `absence_allowances` (con RLS completa)
+- `messages` (con RLS: workers solo su conversación, admins todo)
+- `audit_logs` (RLS: solo admins pueden leer; INSERT solo vía service role)
+- Función `get_daily_summary(p_date)` — SECURITY DEFINER, STABLE
+- Función `is_admin()` — SECURITY DEFINER, STABLE (usada en RLS de check_ins y profiles)
+- Storage buckets: `checkin-photos`, `avatars`, `absence-documents`
+
+## SQL ejecutado en Supabase (histórico)
 ```sql
--- check_ins
+-- check_ins (columnas añadidas)
 ALTER TABLE check_ins ADD COLUMN IF NOT EXISTS photo_url TEXT;
 ALTER TABLE check_ins ADD COLUMN IF NOT EXISTS device_fingerprint TEXT;
--- profiles
+
+-- profiles (columnas añadidas)
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS avatar_url TEXT;
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS birthday DATE;
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS dni TEXT;
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS specialty TEXT;
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS username TEXT UNIQUE;
--- obras + obra_assignments (ejecutar si no está hecho)
-CREATE TABLE IF NOT EXISTS obras (...);
-CREATE TABLE IF NOT EXISTS obra_assignments (...);
--- RLS policies para obras/obra_assignments
--- Storage buckets: checkin-photos, avatars
 
--- ⚠️ PENDIENTE CRÍTICO: ejecutar en Supabase SQL Editor para que
--- los trabajadores puedan ver sus propias asignaciones de obra:
-CREATE POLICY "workers_read_own_assignments"
-ON public.obra_assignments FOR SELECT TO authenticated
-USING (worker_id = auth.uid());
+-- Fix FK: absences.worker_id apunta a public.profiles (necesario para joins PostgREST)
+ALTER TABLE public.absences DROP CONSTRAINT absences_worker_id_fkey;
+ALTER TABLE public.absences ADD CONSTRAINT absences_worker_id_fkey
+  FOREIGN KEY (worker_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
 
-CREATE POLICY "admins_all_assignments"
-ON public.obra_assignments FOR ALL TO authenticated
-USING (
-  EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin','superadmin'))
-);
-
--- ⚠️ PENDIENTE CRÍTICO: ausencias (ejecutar migrations/absences.sql en Supabase SQL Editor)
--- Crea tabla absences + RLS policies + storage bucket absence-documents
--- Ver archivo completo en: migrations/absences.sql
-
--- messages (ejecutado 2026-04-12)
+-- messages (2026-04-12)
 CREATE TABLE IF NOT EXISTS public.messages (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   sender_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
@@ -245,30 +241,24 @@ CREATE TABLE IF NOT EXISTS public.messages (
   read_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
--- RLS: workers_own_messages + admins_all_messages (aplicadas)
+-- RLS aplicada: workers_own_messages + admins_all_messages
+```
 
--- audit_logs (PENDIENTE de ejecutar en Supabase)
-CREATE TABLE IF NOT EXISTS audit_logs (
-  id          UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  admin_id    UUID REFERENCES auth.users(id) ON DELETE SET NULL,
-  action      TEXT NOT NULL,
-  target_type TEXT NOT NULL,
-  target_id   TEXT,
-  target_name TEXT,
-  details     JSONB,
-  created_at  TIMESTAMPTZ DEFAULT NOW()
-);
-ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Admins can view audit logs" ON audit_logs FOR SELECT
-  USING (EXISTS (
-    SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin', 'superadmin')
-  ));
+## Pendiente SQL (deuda técnica menor)
+```sql
+-- Limpiar políticas RLS duplicadas en obra_assignments (Fase 4 — ver sección manual steps)
+-- 4 políticas → 2: las "Admin full access" y "Worker read own assignments" son las antiguas,
+-- las "admins_all_assignments" y "workers_read_own_assignments" son las nuevas equivalentes.
 ```
 
 ## Logo/icono
 - `public/logo.png` → LOGO.png de la empresa (usado en login y sidebars)
 - `public/icon.png` → ICONO.png (favicon)
 
+## CI/CD
+- **GitHub Actions** (`.github/workflows/ci.yml`): corre `npm ci`, `npm run build`, `npm run lint` en cada push a `main` y en PRs. Usa vars de entorno placeholder — solo valida que el build compile.
+- **Vercel** auto-despliega desde `main` tras el CI.
+
 ## Notas de deploy
-- Vercel auto-despliega desde `main`
-- Variables de entorno necesarias: NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY
+- Variables de entorno necesarias en Vercel: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_APP_URL`
+- Rate limiter (`src/lib/rate-limit.ts`): in-memory, sin Redis. Aceptable para ≤50 workers. Si escala, migrar a Upstash Redis añadiendo `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN`.

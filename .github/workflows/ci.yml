@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    name: Build & type-check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        # next build compila TypeScript, verifica tipos y genera el bundle.
+        # Si falla aquí, Vercel también fallaría — lo atajamos antes del deploy.
+        run: npm run build
+        env:
+          # Variables mínimas para que next build no lance errores de runtime
+          # al evaluar process.env en tiempo de compilación.
+          NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.placeholder
+          SUPABASE_SERVICE_ROLE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.placeholder
+          NEXT_PUBLIC_APP_URL: https://placeholder.example.com
+
+      - name: Lint
+        run: npm run lint
+        # No falla el build si hay warnings — solo errores de ESLint rompen el CI
+        continue-on-error: false

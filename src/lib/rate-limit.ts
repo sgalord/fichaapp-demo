@@ -1,12 +1,14 @@
 /**
  * Rate limiter en memoria con ventana deslizante.
  *
- * NOTA PARA PRODUCCIÓN: En Vercel (serverless) cada instancia tiene su propia
- * memoria, por lo que este limiter no es compartido entre instancias paralelas.
- * Para una protección robusta en producción usa Upstash Redis:
- * https://upstash.com/docs/redis/sdks/ratelimit-ts/overview
+ * LIMITACIÓN EN PRODUCCIÓN: En Vercel (serverless) cada instancia tiene su propia
+ * memoria — el límite no se comparte entre instancias paralelas. Un atacante con
+ * múltiples IPs o que acierte varias instancias puede sortearlo.
  *
- * Para el volumen de esta app (pequeña empresa, ≤50 workers) es suficiente.
+ * Para el volumen de esta app (empresa pequeña, ≤50 workers) es suficiente.
+ * Si la app crece, migrar a Upstash Redis:
+ *   https://upstash.com/docs/redis/sdks/ratelimit-ts/overview
+ *   Variables a añadir: UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN
  */
 
 interface RateLimitEntry {
@@ -16,13 +18,13 @@ interface RateLimitEntry {
 
 const store = new Map<string, RateLimitEntry>()
 
-// Limpia entradas expiradas cada 5 minutos para evitar memory leaks
-setInterval(() => {
-  const now = Date.now()
+// Limpieza lazy: purga entradas expiradas en cada llamada para evitar memory leaks
+// sin usar setInterval (no recomendado en funciones serverless).
+function purgeExpired(now: number) {
   for (const [key, entry] of store.entries()) {
     if (entry.resetAt < now) store.delete(key)
   }
-}, 5 * 60 * 1000)
+}
 
 export interface RateLimitResult {
   success: boolean
@@ -37,10 +39,13 @@ export interface RateLimitResult {
  */
 export function rateLimit(key: string, limit: number, windowMs: number): RateLimitResult {
   const now = Date.now()
+
+  // Purgar entradas expiradas solo ocasionalmente para no iterar el map en cada request
+  if (store.size > 500) purgeExpired(now)
+
   const entry = store.get(key)
 
   if (!entry || entry.resetAt < now) {
-    // Ventana nueva
     store.set(key, { count: 1, resetAt: now + windowMs })
     return { success: true, remaining: limit - 1, resetAt: now + windowMs }
   }
