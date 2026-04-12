@@ -34,7 +34,9 @@ type AssignWithJoins = ObraAssignment & {
   worker?: { id: string; full_name: string; avatar_url?: string | null }
 }
 
-// ── Multi-select worker dropdown ─────────────────────────────────────────────
+// ── Multi-select worker list (inline, sin dropdown flotante) ─────────────────
+// Usa un panel inline con búsqueda y scroll para evitar problemas de
+// overflow/clipping en modales anclados al fondo en móvil.
 function WorkerMultiSelect({
   workers,
   selectedIds,
@@ -46,61 +48,85 @@ function WorkerMultiSelect({
   onChange: (ids: string[]) => void
   absenceOnDate: (workerId: string) => string | null
 }) {
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    function handler(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [])
+  const [search, setSearch] = useState('')
 
   function toggle(id: string) {
     onChange(selectedIds.includes(id) ? selectedIds.filter(x => x !== id) : [...selectedIds, id])
   }
 
-  const label = selectedIds.length === 0
-    ? 'Seleccionar trabajadores...'
-    : selectedIds.length === 1
-      ? workers.find(w => w.id === selectedIds[0])?.full_name ?? '1 trabajador'
-      : `${selectedIds.length} trabajadores seleccionados`
+  const filtered = workers.filter(w =>
+    !search || w.full_name.toLowerCase().includes(search.toLowerCase())
+  )
 
   const ABSENCE_LABELS: Record<string, string> = {
     vacation: 'Vacaciones', personal_day: 'As. propio', sick_leave: 'Baja', other: 'Ausente',
   }
 
   return (
-    <div ref={ref} className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen(v => !v)}
-        className="input w-full flex items-center justify-between gap-2 text-left"
-      >
-        <span className={selectedIds.length === 0 ? 'text-zinc-500' : 'text-zinc-200'}>{label}</span>
-        <ChevronDown size={14} className={`flex-shrink-0 text-zinc-500 transition-transform ${open ? 'rotate-180' : ''}`} />
-      </button>
+    <div className="space-y-2">
+      {/* Resumen de selección + buscador */}
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1">
+          <input
+            type="text"
+            placeholder="Buscar trabajador…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="input w-full py-2 text-sm pr-8"
+          />
+          {search && (
+            <button
+              type="button"
+              onClick={() => setSearch('')}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
+            >
+              <X size={13} />
+            </button>
+          )}
+        </div>
+        {selectedIds.length > 0 && (
+          <button
+            type="button"
+            onClick={() => onChange([])}
+            className="text-xs text-zinc-500 hover:text-zinc-300 whitespace-nowrap px-2 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 transition-colors"
+          >
+            Quitar todos
+          </button>
+        )}
+      </div>
 
-      {open && (
-        <div className="absolute top-full left-0 right-0 mt-1 bg-zinc-800 border border-zinc-700 rounded-xl shadow-2xl z-20 max-h-52 overflow-y-auto">
-          {workers.map(w => {
+      {selectedIds.length > 0 && (
+        <p className="text-xs text-zinc-500 px-0.5">
+          {selectedIds.length} trabajador{selectedIds.length > 1 ? 'es' : ''} seleccionado{selectedIds.length > 1 ? 's' : ''}
+        </p>
+      )}
+
+      {/* Lista inline scrollable — nunca se sale del modal */}
+      <div className="border border-zinc-700 rounded-xl bg-zinc-800 overflow-y-auto max-h-48">
+        {filtered.length === 0 ? (
+          <p className="text-sm text-zinc-500 text-center py-4">Sin resultados</p>
+        ) : (
+          filtered.map(w => {
             const absence = absenceOnDate(w.id)
+            const checked = selectedIds.includes(w.id)
             return (
               <label
                 key={w.id}
-                className="flex items-center gap-3 px-3 py-2.5 hover:bg-zinc-700 cursor-pointer transition-colors first:rounded-t-xl last:rounded-b-xl"
+                className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-colors border-b border-zinc-700/50 last:border-0
+                  ${checked ? 'bg-white/5' : 'hover:bg-zinc-700/60'}`}
               >
                 <input
                   type="checkbox"
-                  checked={selectedIds.includes(w.id)}
+                  checked={checked}
                   onChange={() => toggle(w.id)}
                   className="accent-white w-3.5 h-3.5 flex-shrink-0"
                 />
                 <div className={`${avatarColor(w.full_name)} w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0`}>
                   {initials(w.full_name)}
                 </div>
-                <span className={`text-sm truncate flex-1 ${absence ? 'text-zinc-500' : 'text-zinc-200'}`}>{w.full_name}</span>
+                <span className={`text-sm flex-1 min-w-0 truncate ${absence ? 'text-zinc-500' : checked ? 'text-white font-medium' : 'text-zinc-200'}`}>
+                  {w.full_name}
+                </span>
                 {absence && (
                   <span className="flex items-center gap-1 text-[10px] font-medium text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-full px-2 py-0.5 flex-shrink-0">
                     <CalendarOff size={9} />{ABSENCE_LABELS[absence] ?? 'Ausente'}
@@ -108,9 +134,9 @@ function WorkerMultiSelect({
                 )}
               </label>
             )
-          })}
-        </div>
-      )}
+          })
+        )}
+      </div>
     </div>
   )
 }
@@ -677,12 +703,12 @@ export default function AsignacionesPage() {
       {/* ── Modal ── */}
       {showModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end lg:items-center justify-center p-4 animate-fade-in">
-          <div className="bg-zinc-900 border border-zinc-800 w-full max-w-md rounded-2xl shadow-2xl">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800">
+          <div className="bg-zinc-900 border border-zinc-800 w-full max-w-md rounded-2xl shadow-2xl max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800 flex-shrink-0">
               <h2 className="font-semibold text-white">Nueva asignación</h2>
               <button onClick={() => setShowModal(false)} className="text-zinc-500 hover:text-white p-1"><X size={20} /></button>
             </div>
-            <div className="px-5 py-5 space-y-4">
+            <div className="px-5 py-5 space-y-4 overflow-y-auto">
 
               <div>
                 <label className="text-sm font-medium text-zinc-300 mb-1.5 block flex items-center gap-1.5">
