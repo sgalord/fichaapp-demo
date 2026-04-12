@@ -6,7 +6,7 @@ import { formatTime, formatDate, distanceLabel, todayISO, initials, avatarColor 
 import type { CheckIn, DailySummary, Profile } from '@/types'
 import {
   Users, CheckCircle2, Clock, XCircle, AlertTriangle,
-  MapPin, RefreshCw, Loader2, ArrowRight, Bell, TrendingUp, CalendarOff,
+  MapPin, RefreshCw, Loader2, ArrowRight, Bell, TrendingUp, CalendarOff, MessageSquare,
 } from 'lucide-react'
 import Link from 'next/link'
 
@@ -34,6 +34,8 @@ export default function AdminDashboard() {
   const [lastUpdate, setLastUpdate]   = useState<Date>(new Date())
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [showNotifs, setShowNotifs]   = useState(false)
+  const [pendingAbsences, setPendingAbsences] = useState<{ id: string; worker: { full_name: string }; type: string; date_from: string; date_to: string }[]>([])
+  const [unreadMessages, setUnreadMessages]   = useState(0)
 
   const loadDashboard = useCallback(async (silent = false) => {
     if (!silent) setLoading(true)
@@ -54,12 +56,20 @@ export default function AdminDashboard() {
       .order('timestamp', { ascending: false })
 
     const today = todayISO()
-    const [obraRes, absenceRes] = await Promise.all([
+    const [obraRes, absenceRes, pendingRes, msgRes] = await Promise.all([
       fetch(`/api/obra-assignments?date=${today}`),
       fetch(`/api/absences?status=approved&overlap=true&date_from=${today}&date_to=${today}`),
+      fetch(`/api/absences?status=pending`),
+      fetch(`/api/messages`),
     ])
     const obraData    = obraRes.ok    ? (await obraRes.json()).data    ?? [] : []
     const absenceData = absenceRes.ok ? (await absenceRes.json()).data ?? [] : []
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const pendingData = pendingRes.ok ? (await pendingRes.json()).data ?? [] : []
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const msgData: any[] = msgRes.ok ? (await msgRes.json()).data ?? [] : []
+    setPendingAbsences(pendingData)
+    setUnreadMessages(msgData.reduce((acc: number, c: { unread_count?: number }) => acc + (c.unread_count ?? 0), 0))
 
     const withObraToday = new Set<string>(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -114,7 +124,6 @@ export default function AdminDashboard() {
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'check_ins' },
         async (payload) => {
-          // Obtener nombre del trabajador
           const { data: prof } = await supabase
             .from('profiles')
             .select('full_name')
@@ -133,6 +142,20 @@ export default function AdminDashboard() {
       )
       .subscribe()
 
+    return () => { supabase.removeChannel(channel) }
+  }, [supabase, loadDashboard])
+
+  // Suscripción Realtime — nuevas solicitudes de ausencia
+  useEffect(() => {
+    const channel = supabase
+      .channel('absences-live')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'absences' }, () => {
+        loadDashboard(true)
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, () => {
+        loadDashboard(true)
+      })
+      .subscribe()
     return () => { supabase.removeChannel(channel) }
   }, [supabase, loadDashboard])
 
@@ -320,6 +343,46 @@ export default function AdminDashboard() {
         </section>
       )}
 
+      {/* ── Solicitudes de ausencia pendientes ── */}
+      {pendingAbsences.length > 0 && (
+        <section className="space-y-2">
+          <div className="flex items-center justify-between">
+            <p className="section-title flex items-center gap-1.5 text-amber-400">
+              <CalendarOff size={12} />
+              Solicitudes pendientes ({pendingAbsences.length})
+            </p>
+            <Link href="/admin/ausencias" className="text-xs text-zinc-500 hover:text-zinc-300 flex items-center gap-1">
+              Ver todas <ArrowRight size={11} />
+            </Link>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {pendingAbsences.slice(0, 4).map((a) => (
+              <Link key={a.id} href="/admin/ausencias"
+                className="card flex items-center gap-3 bg-amber-500/5 border-amber-500/15 hover:bg-amber-500/10 transition-colors">
+                <Avatar name={a.worker?.full_name ?? '?'} avatarUrl={null} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-zinc-200 truncate">{a.worker?.full_name ?? '—'}</p>
+                  <p className="text-xs text-zinc-500">
+                    {a.type === 'vacation' && 'Vacaciones'}
+                    {a.type === 'personal_day' && 'As. propio'}
+                    {a.type === 'sick_leave' && 'Baja'}
+                    {a.type === 'other' && 'Otro'}
+                    {' · '}{formatDate(a.date_from)}
+                    {a.date_from !== a.date_to && ` → ${formatDate(a.date_to)}`}
+                  </p>
+                </div>
+                <span className="badge-orange flex-shrink-0"><Clock size={10} />Pendiente</span>
+              </Link>
+            ))}
+          </div>
+          {pendingAbsences.length > 4 && (
+            <Link href="/admin/ausencias" className="text-xs text-zinc-500 hover:text-zinc-300 flex items-center gap-1 justify-center py-1">
+              +{pendingAbsences.length - 4} más <ArrowRight size={11} />
+            </Link>
+          )}
+        </section>
+      )}
+
       {/* ── Timestamp ── */}
       <p className="text-center text-xs text-zinc-700">
         Actualizado {formatTime(lastUpdate)}
@@ -340,6 +403,16 @@ export default function AdminDashboard() {
         <Link href="/admin/reports" className="card-hover flex flex-col gap-3 col-span-2 lg:col-span-1">
           <TrendingUp size={20} className="text-zinc-400" />
           <span className="text-sm font-medium text-zinc-300">Informes y exportación</span>
+          <ArrowRight size={14} className="text-zinc-600 self-end mt-auto" />
+        </Link>
+        <Link href="/admin/mensajes" className="card-hover flex flex-col gap-3 relative">
+          <MessageSquare size={20} className="text-blue-400" />
+          {unreadMessages > 0 && (
+            <span className="absolute top-3 left-8 w-4 h-4 bg-blue-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">
+              {unreadMessages > 9 ? '9+' : unreadMessages}
+            </span>
+          )}
+          <span className="text-sm font-medium text-zinc-300">Mensajes</span>
           <ArrowRight size={14} className="text-zinc-600 self-end mt-auto" />
         </Link>
       </div>

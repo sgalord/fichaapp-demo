@@ -21,12 +21,20 @@ async function getAuthUser(req?: NextRequest) {
   return { user, role: profile?.role ?? 'worker' }
 }
 
-// Esquema para que el admin apruebe/rechace o añada nota
+// Esquema para que el admin apruebe/rechace, edite o añada nota
 const ReviewSchema = z.object({
-  status:       z.enum(['approved', 'rejected']).optional(),
+  status:       z.enum(['approved', 'rejected', 'pending']).optional(),
   review_notes: z.string().max(500).optional().nullable(),
   admin_note:   z.string().max(500).optional().nullable(),
-})
+  // Campos editables por admin en cualquier estado
+  type:         z.enum(['vacation', 'personal_day', 'sick_leave', 'other']).optional(),
+  date_from:    z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  date_to:      z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  reason:       z.string().max(500).optional().nullable(),
+}).refine(d => {
+  if (d.date_from && d.date_to) return d.date_to >= d.date_from
+  return true
+}, { message: 'date_to debe ser igual o posterior a date_from' })
 
 // Esquema para que el trabajador actualice su solicitud pendiente
 const WorkerUpdateSchema = z.object({
@@ -86,7 +94,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
     const updates: Record<string, unknown> = { updated_at: new Date().toISOString() }
 
-    // Cambio de estado (opcional — puede que solo quiera guardar una nota)
+    // Cambio de estado (opcional)
     if (parsed.data.status) {
       updates.status       = parsed.data.status
       updates.reviewed_by  = auth.user.id
@@ -94,6 +102,11 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     }
     if ('review_notes' in parsed.data) updates.review_notes = parsed.data.review_notes ?? null
     if ('admin_note'   in parsed.data) updates.admin_note   = parsed.data.admin_note   ?? null
+    // Edición de campos de la solicitud (admin puede editar en cualquier estado)
+    if (parsed.data.type)      updates.type      = parsed.data.type
+    if (parsed.data.date_from) updates.date_from = parsed.data.date_from
+    if (parsed.data.date_to)   updates.date_to   = parsed.data.date_to
+    if ('reason' in parsed.data) updates.reason  = parsed.data.reason ?? null
 
     const { data, error } = await adminClient
       .from('absences')

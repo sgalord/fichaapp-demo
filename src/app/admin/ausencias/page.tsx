@@ -114,6 +114,12 @@ function TabSolicitudes() {
   const [adminNoteReview, setAdminNoteReview] = useState('')
   const [saving, setSaving]         = useState(false)
 
+  // Modal editar (admin edita cualquier ausencia)
+  const [editing, setEditing]       = useState<AbsenceRow | null>(null)
+  const [editForm, setEditForm]     = useState({ type: 'vacation' as keyof typeof ABSENCE_TYPE_LABELS, date_from: '', date_to: '', reason: '' })
+  const [savingEdit, setSavingEdit] = useState(false)
+  const [editError, setEditError]   = useState('')
+
   // Nota inline (editar por fila)
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null)
   const [inlineNote, setInlineNote]       = useState('')
@@ -221,6 +227,31 @@ function TabSolicitudes() {
     setEditingNoteId(null)
     // Actualizar la fila localmente sin recargar todo
     setRows(prev => prev.map(r => r.id === id ? { ...r, admin_note: inlineNote || null } : r))
+  }
+
+  async function submitEdit() {
+    if (!editing) return
+    if (!editForm.date_from || !editForm.date_to) { setEditError('Las fechas son obligatorias'); return }
+    if (editForm.date_to < editForm.date_from) { setEditError('La fecha fin debe ser posterior al inicio'); return }
+    setSavingEdit(true)
+    setEditError('')
+    const token = await getToken()
+    const res = await fetch(`/api/absences/${editing.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify({
+        type:      editForm.type,
+        date_from: editForm.date_from,
+        date_to:   editForm.date_to,
+        reason:    editForm.reason || null,
+      }),
+    })
+    const json = await res.json()
+    setSavingEdit(false)
+    if (!res.ok) { setEditError(json.error ?? 'Error al guardar'); return }
+    setEditing(null)
+    setMessage({ text: 'Ausencia actualizada', ok: true })
+    await load()
   }
 
   async function deleteAbsence(id: string) {
@@ -345,6 +376,11 @@ function TabSolicitudes() {
                         <MessageSquare size={12} />Revisar<ChevronDown size={11} />
                       </button>
                     )}
+                    <button
+                      onClick={() => { setEditing(row); setEditForm({ type: row.type, date_from: row.date_from, date_to: row.date_to, reason: row.reason ?? '' }); setEditError('') }}
+                      className="p-1.5 rounded-lg text-zinc-600 hover:text-blue-400 hover:bg-zinc-800 transition-colors" title="Editar ausencia">
+                      <Edit2 size={15} />
+                    </button>
                     {/* Botón añadir/editar nota admin */}
                     <button
                       onClick={() => { setEditingNoteId(row.id); setInlineNote(row.admin_note ?? '') }}
@@ -455,6 +491,72 @@ function TabSolicitudes() {
               <button onClick={() => submitReview('approved')} disabled={saving}
                 className="flex-1 btn-primary flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500">
                 {saving ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}Aprobar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal: editar ausencia (admin) ── */}
+      {editing && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 animate-fade-in">
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setEditing(null)} />
+          <div className="relative bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md p-6 space-y-5 animate-slide-up max-h-[90vh] overflow-y-auto">
+            <div className="flex items-start justify-between">
+              <div>
+                <h2 className="text-base font-bold text-white">Editar ausencia</h2>
+                <p className="text-sm text-zinc-500 mt-0.5">{editing.worker?.full_name}</p>
+              </div>
+              <button onClick={() => setEditing(null)} className="p-1.5 text-zinc-500 hover:text-white rounded-lg"><X size={18} /></button>
+            </div>
+
+            {/* Tipo */}
+            <div>
+              <label className="section-title mb-2 block">Tipo</label>
+              <div className="grid grid-cols-2 gap-2">
+                {(Object.entries(ABSENCE_TYPE_LABELS) as [keyof typeof ABSENCE_TYPE_LABELS, string][]).map(([val, label]) => (
+                  <button key={val} type="button" onClick={() => setEditForm(f => ({ ...f, type: val }))}
+                    className={cn('px-3 py-2.5 rounded-xl text-sm font-medium text-left transition-all border',
+                      editForm.type === val
+                        ? 'bg-white text-zinc-950 border-white'
+                        : 'bg-zinc-800 text-zinc-400 border-zinc-700 hover:border-zinc-600 hover:text-zinc-200'
+                    )}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Fechas */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="section-title mb-1.5 block">Desde</label>
+                <input type="date" value={editForm.date_from}
+                  onChange={e => setEditForm(f => ({ ...f, date_from: e.target.value }))}
+                  className="input w-full text-sm" required />
+              </div>
+              <div>
+                <label className="section-title mb-1.5 block">Hasta</label>
+                <input type="date" value={editForm.date_to} min={editForm.date_from}
+                  onChange={e => setEditForm(f => ({ ...f, date_to: e.target.value }))}
+                  className="input w-full text-sm" required />
+              </div>
+            </div>
+
+            {/* Motivo */}
+            <div>
+              <label className="section-title mb-1.5 block">Motivo <span className="text-zinc-600 normal-case font-normal">(opcional)</span></label>
+              <textarea value={editForm.reason} onChange={e => setEditForm(f => ({ ...f, reason: e.target.value }))}
+                placeholder="Motivo de la ausencia…" rows={2} className="input w-full resize-none text-sm" />
+            </div>
+
+            {editError && <p className="text-sm text-red-400 flex items-center gap-1.5"><XCircle size={14} />{editError}</p>}
+
+            <div className="flex gap-3 pt-1">
+              <button onClick={() => setEditing(null)} className="flex-1 btn-secondary">Cancelar</button>
+              <button onClick={submitEdit} disabled={savingEdit}
+                className="flex-1 btn-primary flex items-center justify-center gap-2 disabled:opacity-40">
+                {savingEdit ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}Guardar cambios
               </button>
             </div>
           </div>

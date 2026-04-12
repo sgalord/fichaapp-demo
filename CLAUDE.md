@@ -39,6 +39,8 @@ Usar Desktop Commander `start_process` con `cmd.exe`, luego `interact_with_proce
 /admin/reports      → informes
 /worker/ausencias   → solicitar y ver ausencias (trabajador)
 /admin/import       → importar 20 trabajadores desde Excel (un clic)
+/admin/mensajes     → mensajes directos con trabajadores (lista conversaciones + chat)
+/worker/mensajes    → chat directo con la administración
 /forgot-password    → recuperar contraseña
 /reset-password     → nueva contraseña (PKCE flow)
 /auth/callback      → callback de Supabase auth
@@ -67,10 +69,15 @@ POST /api/absences               → crear solicitud de ausencia (detecta solapa
 GET/PUT/DELETE /api/absences/[id] → ver/aprobar-rechazar/eliminar ausencia
 GET  /api/absence-allowances?year → saldo vacaciones+asuntos propios por trabajador (calculado)
 PUT  /api/absence-allowances     → upsert días asignados a un trabajador para un año
+GET  /api/my-balance?year        → saldo del trabajador autenticado (vacaciones, asuntos propios, bajas)
 GET  /api/geocode?address=...    → geocodificación de dirección
 GET/POST /api/locations          → ubicaciones legacy (sistema antiguo)
 GET/PUT/DELETE /api/locations/[id]
 GET/POST /api/groups
+GET  /api/messages               → admin: lista conversaciones (con unread_count); worker: su conversación
+GET  /api/messages?worker_id=UUID → admin: conversación de un trabajador (marca como leído)
+POST /api/messages               → enviar mensaje (worker: body; admin: body + worker_id)
+DELETE /api/messages/[id]        → solo admins
 ```
 
 ## Base de datos — tablas clave
@@ -137,7 +144,15 @@ UNIQUE(worker_id, year)
   - `pre_approved=true` → se crea directamente como `status='approved'`
   - Icono StickyNote por fila → edición inline de admin_note sin recargar
   - Modal Revisar: dos campos separados (review_notes para trabajador, admin_note interno)
-- `/worker/ausencias` → ver y solicitar ausencias, subir justificante
+  - Botón Editar (lápiz) en TODAS las filas → modal edita tipo/fechas/motivo sin cambiar estado
+- `/worker/ausencias` → ver saldo de días (vacaciones/asuntos propios), solicitar ausencias, editar pendientes, solicitar modificación de aprobadas (envía mensaje al admin)
+
+### Módulo de Mensajes
+- Tabla `messages`: sender_id, worker_id (siempre el trabajador), body, is_from_admin, read_at
+- RLS: trabajadores solo ven/envían en su propia conversación; admins ven todo
+- `/admin/mensajes` → lista de conversaciones con unread badge + chat en tiempo real (Realtime)
+- `/worker/mensajes` → chat directo con la administración (Realtime)
+- Dashboard admin muestra solicitudes de ausencia pendientes + badge de mensajes no leídos
 ### API absences
 - POST acepta `worker_id?` (admin), `pre_approved?` (bool), `admin_note?` (interno)
 - PUT `status` es **opcional** — se puede actualizar solo admin_note sin cambiar estado
@@ -219,6 +234,18 @@ USING (
 -- ⚠️ PENDIENTE CRÍTICO: ausencias (ejecutar migrations/absences.sql en Supabase SQL Editor)
 -- Crea tabla absences + RLS policies + storage bucket absence-documents
 -- Ver archivo completo en: migrations/absences.sql
+
+-- messages (ejecutado 2026-04-12)
+CREATE TABLE IF NOT EXISTS public.messages (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  sender_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  worker_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  body TEXT NOT NULL CHECK (char_length(body) BETWEEN 1 AND 2000),
+  is_from_admin BOOLEAN NOT NULL DEFAULT false,
+  read_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+-- RLS: workers_own_messages + admins_all_messages (aplicadas)
 
 -- audit_logs (PENDIENTE de ejecutar en Supabase)
 CREATE TABLE IF NOT EXISTS audit_logs (

@@ -5,7 +5,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import {
   LayoutDashboard, Users, ClipboardList,
-  LogOut, Users2, BarChart3, Menu, X, HardHat, CalendarDays, CalendarOff,
+  LogOut, Users2, BarChart3, Menu, X, HardHat, CalendarDays, CalendarOff, MessageSquare,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useState, useEffect } from 'react'
@@ -19,6 +19,7 @@ const NAV = [
   { href: '/admin/ausencias',    label: 'Ausencias',    icon: CalendarOff },
   { href: '/admin/groups',       label: 'Grupos',       icon: Users2 },
   { href: '/admin/reports',      label: 'Informes',     icon: BarChart3 },
+  { href: '/admin/mensajes',     label: 'Mensajes',     icon: MessageSquare },
 ]
 
 function MobileBottomNav() {

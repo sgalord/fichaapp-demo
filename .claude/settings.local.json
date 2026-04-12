@@ -42,7 +42,12 @@
       "Bash(rmdir src/app/api/admin)",
       "Bash(grep -r \"vercel.app\\\\|fichaapp\" .env*)",
       "mcp__101489dc-fe8c-44de-b4df-8fc11bc0ffc9__apply_migration",
-      "Bash(node \"C:\\\\Program Files\\\\nodejs\\\\node_modules\\\\npm\\\\bin\\\\npm-cli.js\" run dev)"
+      "Bash(node \"C:\\\\Program Files\\\\nodejs\\\\node_modules\\\\npm\\\\bin\\\\npm-cli.js\" run dev)",
+      "Bash(node -e \"const pkg = require\\('./node_modules/next/package.json'\\); console.log\\(pkg.version\\)\")",
+      "Bash(cp src/middleware.ts src/proxy.ts)",
+      "Bash(rm src/middleware.ts)",
+      "Bash(node -e \"const p = require\\('./package.json'\\); console.log\\('@supabase/supabase-js:', p.dependencies['@supabase/supabase-js']\\)\")",
+      "Bash(curl -s -X POST http://localhost:3000/api/absences -H 'Content-Type: application/json' -d '{\"type\":\"vacation\",\"date_from\":\"2026-05-10\",\"date_to\":\"2026-05-12\"}')"
     ]
   }
 }
