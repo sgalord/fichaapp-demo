@@ -38,6 +38,10 @@ jobs:
           NEXT_PUBLIC_APP_URL: https://placeholder.example.com
 
       - name: Lint
-        run: npm run lint
-        # No falla el build si hay warnings — solo errores de ESLint rompen el CI
-        continue-on-error: false
+        # next lint en v16 requiere --dir explícito
+        run: npx next lint --dir src
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.placeholder
+          SUPABASE_SERVICE_ROLE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.placeholder
+          NEXT_PUBLIC_APP_URL: https://placeholder.example.com
