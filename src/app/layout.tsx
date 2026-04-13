@@ -32,10 +32,13 @@ export default function RootLayout({
   return (
     <html lang="es">
       <head>
-        {/* Disable Vercel toolbar before it initializes */}
-        <script dangerouslySetInnerHTML={{ __html:
-          'window.VERCEL_TOOLBAR_ENABLED=false;window.__VERCEL_TOOLBAR_ENABLED__=false;window.__vercel_toolbar_injected__=true;'
-        }} />
+        {/* Aggressively remove Vercel toolbar */}
+        <script dangerouslySetInnerHTML={{ __html: `
+          window.VERCEL_TOOLBAR_ENABLED=false;
+          new MutationObserver(function(m,o){
+            document.querySelectorAll('vercel-toolbar, vercel-live-feedback, vercel-toolbar-portal, [data-vercel-toolbar], [id*="vercel"], vercel-feedback').forEach(function(el){el.remove()});
+          }).observe(document.documentElement,{childList:true,subtree:true});
+        `}} />
         <link rel="apple-touch-icon" href="/icon-192.png" />
       </head>
       <body className="min-h-screen bg-zinc-950">
