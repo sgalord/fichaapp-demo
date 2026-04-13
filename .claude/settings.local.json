@@ -54,7 +54,8 @@
       "mcp__101489dc-fe8c-44de-b4df-8fc11bc0ffc9__create_project",
       "mcp__101489dc-fe8c-44de-b4df-8fc11bc0ffc9__get_project",
       "mcp__101489dc-fe8c-44de-b4df-8fc11bc0ffc9__get_publishable_keys",
-      "mcp__63205a91-c641-41e0-9c8e-cea20f79628d__web_fetch_vercel_url"
+      "mcp__63205a91-c641-41e0-9c8e-cea20f79628d__web_fetch_vercel_url",
+      "mcp__101489dc-fe8c-44de-b4df-8fc11bc0ffc9__get_logs"
     ]
   }
 }
