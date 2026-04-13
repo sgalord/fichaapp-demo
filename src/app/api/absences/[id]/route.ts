@@ -31,6 +31,8 @@ const ReviewSchema = z.object({
   date_from:    z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   date_to:      z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   reason:       z.string().max(500).optional().nullable(),
+  // Admin (incluido superadmin) puede subir/reemplazar el documento justificante
+  document_url: z.string().url().optional().nullable(),
 }).refine(d => {
   if (d.date_from && d.date_to) return d.date_to >= d.date_from
   return true
@@ -106,7 +108,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     if (parsed.data.type)      updates.type      = parsed.data.type
     if (parsed.data.date_from) updates.date_from = parsed.data.date_from
     if (parsed.data.date_to)   updates.date_to   = parsed.data.date_to
-    if ('reason' in parsed.data) updates.reason  = parsed.data.reason ?? null
+    if ('reason'       in parsed.data) updates.reason       = parsed.data.reason       ?? null
+    if ('document_url' in parsed.data) updates.document_url = parsed.data.document_url ?? null
 
     const { data, error } = await adminClient
       .from('absences')

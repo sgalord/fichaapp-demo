@@ -11,7 +11,7 @@ import {
   Loader2, Check, X, Search, CalendarOff, FileText,
   ChevronDown, Clock, CheckCircle2, XCircle, Filter,
   ExternalLink, Trash2, MessageSquare, BarChart3, ListChecks,
-  Edit2, Save, Plus, StickyNote,
+  Edit2, Save, Plus, StickyNote, Upload, Paperclip,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -125,6 +125,11 @@ function TabSolicitudes() {
   const [inlineNote, setInlineNote]       = useState('')
   const [savingNote, setSavingNote]       = useState(false)
 
+  // Upload de documento en modal editar
+  const [docFile, setDocFile]         = useState<File | null>(null)
+  const [uploadingDoc, setUploadingDoc] = useState(false)
+  const [docUploadError, setDocUploadError] = useState('')
+
   // Modal crear (admin)
   const [showCreate, setShowCreate]   = useState(false)
   const [workers, setWorkers]         = useState<WorkerSimple[]>([])
@@ -139,6 +144,59 @@ function TabSolicitudes() {
     const { data: { session } } = await supabase.auth.getSession()
     return session?.access_token
   }, [supabase])
+
+  // Sube un archivo al bucket absence-documents y guarda la URL en la ausencia
+  async function uploadDocument(absenceId: string, workerId: string) {
+    if (!docFile) return
+    setUploadingDoc(true)
+    setDocUploadError('')
+
+    // Validar tamaño (máx 10 MB)
+    if (docFile.size > 10 * 1024 * 1024) {
+      setDocUploadError('El archivo no puede superar 10 MB.')
+      setUploadingDoc(false)
+      return
+    }
+
+    const ext  = docFile.name.split('.').pop()?.toLowerCase() ?? 'pdf'
+    const path = `${workerId}/${Date.now()}.${ext}`
+
+    const { error: uploadErr } = await supabase.storage
+      .from('absence-documents')
+      .upload(path, docFile, { upsert: true })
+
+    if (uploadErr) {
+      setDocUploadError(`Error al subir: ${uploadErr.message}`)
+      setUploadingDoc(false)
+      return
+    }
+
+    const { data: { publicUrl } } = supabase.storage
+      .from('absence-documents')
+      .getPublicUrl(path)
+
+    const token = await getToken()
+    const res = await fetch(`/api/absences/${absenceId}`, {
+      method:  'PUT',
+      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body:    JSON.stringify({ document_url: publicUrl }),
+    })
+
+    if (res.ok) {
+      const json = await res.json()
+      const newUrl: string = json.data?.document_url ?? publicUrl
+      // Actualizar ambos modales (solo uno estará abierto a la vez)
+      setEditing(prev   => prev ? { ...prev, document_url: newUrl } : null)
+      setReviewing(prev => prev ? { ...prev, document_url: newUrl } : null)
+      setRows(prev => prev.map(r => r.id === absenceId ? { ...r, document_url: newUrl } : r))
+      setDocFile(null)
+      setMessage({ text: 'Documento subido correctamente', ok: true })
+    } else {
+      const json = await res.json()
+      setDocUploadError(json.error ?? 'Error al guardar el documento')
+    }
+    setUploadingDoc(false)
+  }
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -371,14 +429,15 @@ function TabSolicitudes() {
                       </a>
                     )}
                     {row.status === 'pending' && (
-                      <button onClick={() => { setReviewing(row); setReviewNote(''); setAdminNoteReview(row.admin_note ?? '') }}
+                      <button onClick={() => { setReviewing(row); setReviewNote(''); setAdminNoteReview(row.admin_note ?? ''); setDocFile(null); setDocUploadError('') }}
                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-zinc-800 text-zinc-300 hover:bg-zinc-700">
                         <MessageSquare size={12} />Revisar<ChevronDown size={11} />
                       </button>
                     )}
                     <button
-                      onClick={() => { setEditing(row); setEditForm({ type: row.type, date_from: row.date_from, date_to: row.date_to, reason: row.reason ?? '' }); setEditError('') }}
-                      className="p-1.5 rounded-lg text-zinc-600 hover:text-blue-400 hover:bg-zinc-800 transition-colors" title="Editar ausencia">
+                      onClick={() => { setEditing(row); setEditForm({ type: row.type, date_from: row.date_from, date_to: row.date_to, reason: row.reason ?? '' }); setEditError(''); setDocFile(null); setDocUploadError('') }}
+                      className="p-1.5 rounded-lg text-zinc-600 hover:text-blue-400 hover:bg-zinc-800 transition-colors" title="Editar ausencia"
+                    >
                       <Edit2 size={15} />
                     </button>
                     {/* Botón añadir/editar nota admin */}
@@ -457,14 +516,48 @@ function TabSolicitudes() {
                   <span className="text-zinc-300">{reviewing.reason}</span>
                 </div>
               )}
-              {reviewing.document_url && (
-                <div className="pt-2 border-t border-zinc-700">
+              {/* Documento actual + opción de subir */}
+              <div className="pt-2 border-t border-zinc-700 space-y-2">
+                {reviewing.document_url ? (
                   <a href={reviewing.document_url} target="_blank" rel="noopener noreferrer"
                     className="flex items-center gap-1.5 text-sm text-blue-400 hover:text-blue-300">
                     <FileText size={14} />Ver justificante<ExternalLink size={12} />
                   </a>
+                ) : (
+                  <p className="text-xs text-zinc-600 italic">Sin justificante adjunto</p>
+                )}
+                {/* Upload de documento desde el modal de revisión */}
+                <div className="flex items-center gap-2 pt-1">
+                  <label className="flex-1 flex items-center gap-2 cursor-pointer border border-zinc-700 hover:border-zinc-500 rounded-xl px-3 py-2 transition-colors group">
+                    <Paperclip size={13} className="text-zinc-500 group-hover:text-zinc-300 flex-shrink-0 transition-colors" />
+                    <span className="text-xs text-zinc-400 truncate">
+                      {docFile ? docFile.name : reviewing.document_url ? 'Reemplazar documento…' : 'Adjuntar documento…'}
+                    </span>
+                    <input
+                      type="file"
+                      accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx"
+                      className="hidden"
+                      onChange={e => { setDocFile(e.target.files?.[0] ?? null); setDocUploadError('') }}
+                    />
+                  </label>
+                  {docFile && (
+                    <button
+                      onClick={() => uploadDocument(reviewing.id, reviewing.worker_id)}
+                      disabled={uploadingDoc}
+                      className="btn-primary py-2 px-3 text-xs gap-1.5 flex items-center flex-shrink-0"
+                    >
+                      {uploadingDoc ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />}
+                      Subir
+                    </button>
+                  )}
                 </div>
-              )}
+                {docUploadError && (
+                  <p className="text-xs text-red-400 flex items-center gap-1.5">
+                    <XCircle size={13} />{docUploadError}
+                  </p>
+                )}
+                <p className="text-xs text-zinc-700">PDF, imagen o Word · Máx. 10 MB</p>
+              </div>
             </div>
 
             <div>
@@ -548,6 +641,73 @@ function TabSolicitudes() {
               <label className="section-title mb-1.5 block">Motivo <span className="text-zinc-600 normal-case font-normal">(opcional)</span></label>
               <textarea value={editForm.reason} onChange={e => setEditForm(f => ({ ...f, reason: e.target.value }))}
                 placeholder="Motivo de la ausencia…" rows={2} className="input w-full resize-none text-sm" />
+            </div>
+
+            {/* ── Documento / Justificante ── */}
+            <div className="border-t border-zinc-800 pt-4 space-y-3">
+              <label className="section-title flex items-center gap-1.5">
+                <Paperclip size={12} />
+                Justificante / Documento
+              </label>
+
+              {/* Documento actual */}
+              {editing.document_url && (
+                <a
+                  href={editing.document_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 text-sm text-blue-400 hover:text-blue-300 transition-colors"
+                >
+                  <FileText size={14} />
+                  <span className="truncate">Ver documento actual</span>
+                  <ExternalLink size={12} className="flex-shrink-0" />
+                </a>
+              )}
+
+              {/* Selector de archivo */}
+              <div className="flex items-center gap-2">
+                <label className="flex-1 flex items-center gap-2.5 cursor-pointer border border-zinc-700 hover:border-zinc-500 rounded-xl px-3 py-2.5 transition-colors group">
+                  <Upload size={14} className="text-zinc-500 group-hover:text-zinc-300 flex-shrink-0 transition-colors" />
+                  <span className="text-sm text-zinc-400 truncate min-w-0">
+                    {docFile ? docFile.name : editing.document_url ? 'Reemplazar documento…' : 'Subir documento…'}
+                  </span>
+                  <input
+                    type="file"
+                    accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx"
+                    className="hidden"
+                    onChange={e => { setDocFile(e.target.files?.[0] ?? null); setDocUploadError('') }}
+                  />
+                </label>
+                {docFile && (
+                  <button
+                    onClick={() => uploadDocument(editing.id, editing.worker_id)}
+                    disabled={uploadingDoc}
+                    className="btn-primary py-2.5 px-4 text-sm gap-2 flex items-center flex-shrink-0"
+                  >
+                    {uploadingDoc
+                      ? <Loader2 size={14} className="animate-spin" />
+                      : <Upload size={14} />}
+                    Subir
+                  </button>
+                )}
+                {docFile && !uploadingDoc && (
+                  <button
+                    onClick={() => setDocFile(null)}
+                    className="p-2 text-zinc-600 hover:text-red-400 rounded-lg transition-colors flex-shrink-0"
+                    title="Cancelar selección"
+                  >
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
+
+              <p className="text-xs text-zinc-600">PDF, imagen o Word · Máx. 10 MB</p>
+
+              {docUploadError && (
+                <p className="text-xs text-red-400 flex items-center gap-1.5">
+                  <XCircle size={13} />{docUploadError}
+                </p>
+              )}
             </div>
 
             {editError && <p className="text-sm text-red-400 flex items-center gap-1.5"><XCircle size={14} />{editError}</p>}
