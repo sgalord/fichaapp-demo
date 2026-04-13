@@ -7,6 +7,7 @@ import type { CheckIn, DailySummary, Profile } from '@/types'
 import {
   Users, CheckCircle2, Clock, XCircle, AlertTriangle,
   MapPin, RefreshCw, Loader2, ArrowRight, Bell, TrendingUp, CalendarOff, MessageSquare,
+  Camera, Shield, Calendar, BarChart3, Fingerprint, X, ChevronRight,
 } from 'lucide-react'
 import Link from 'next/link'
 
@@ -25,9 +26,125 @@ interface Notification {
   time: Date
 }
 
+const OVERVIEW_FEATURES = [
+  {
+    icon: MapPin,
+    title: 'Fichaje por GPS',
+    desc: 'Cada trabajador ficha desde su móvil. La app valida que está dentro del radio del centro de trabajo asignado.',
+    color: 'text-blue-400',
+    bg: 'bg-blue-400/10',
+  },
+  {
+    icon: Camera,
+    title: 'Foto en cada fichaje',
+    desc: 'Se captura una foto automáticamente al fichar. Evidencia visual que elimina suplantaciones.',
+    color: 'text-violet-400',
+    bg: 'bg-violet-400/10',
+  },
+  {
+    icon: Fingerprint,
+    title: 'Detección de fraude',
+    desc: 'Huella digital del dispositivo en cada fichaje. Si dos empleados usan el mismo móvil, se detecta automáticamente.',
+    color: 'text-red-400',
+    bg: 'bg-red-400/10',
+  },
+  {
+    icon: Calendar,
+    title: 'Vacaciones y ausencias',
+    desc: 'Solicitudes, aprobaciones, saldo de días y justificantes. Todo automatizado con flujo de trabajo.',
+    color: 'text-emerald-400',
+    bg: 'bg-emerald-400/10',
+  },
+  {
+    icon: BarChart3,
+    title: 'Informes y Excel',
+    desc: 'Exporta informes mensuales con fichajes, ausencias y resumen por empleado. Listo para nóminas.',
+    color: 'text-amber-400',
+    bg: 'bg-amber-400/10',
+  },
+  {
+    icon: MessageSquare,
+    title: 'Mensajería directa',
+    desc: 'Canal de comunicación entre empresa y trabajadores. Notificaciones en tiempo real.',
+    color: 'text-cyan-400',
+    bg: 'bg-cyan-400/10',
+  },
+]
+
+function AppOverview({ onDismiss }: { onDismiss: () => void }) {
+  return (
+    <div className="relative bg-gradient-to-br from-zinc-900 via-zinc-900 to-blue-950/30 border border-zinc-800 rounded-2xl p-6 md:p-8 overflow-hidden">
+      {/* Glow */}
+      <div className="absolute top-0 right-0 w-72 h-72 bg-blue-600/5 rounded-full blur-3xl pointer-events-none" />
+
+      {/* Close */}
+      <button
+        onClick={onDismiss}
+        className="absolute top-4 right-4 p-1.5 rounded-lg text-zinc-600 hover:text-zinc-300 hover:bg-zinc-800 transition-colors z-10"
+      >
+        <X size={16} />
+      </button>
+
+      <div className="relative">
+        {/* Header */}
+        <div className="mb-6">
+          <div className="inline-flex items-center gap-2 bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs font-medium px-3 py-1 rounded-full mb-3">
+            <Shield className="w-3 h-3" />
+            Plataforma de control de presencia
+          </div>
+          <h2 className="text-xl md:text-2xl font-bold text-white mb-2">
+            Bienvenido a FichaApp
+          </h2>
+          <p className="text-zinc-400 text-sm max-w-2xl leading-relaxed">
+            Plataforma completa para gestionar fichajes, presencia y personal.
+            GPS, foto, detección de fraude, vacaciones, informes y mensajería en una sola app.
+          </p>
+        </div>
+
+        {/* Features grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {OVERVIEW_FEATURES.map((f) => {
+            const Icon = f.icon
+            return (
+              <div key={f.title} className="flex gap-3 p-3 rounded-xl bg-zinc-950/50 border border-zinc-800/50">
+                <div className={`${f.bg} w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0`}>
+                  <Icon className={`w-4 h-4 ${f.color}`} />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-zinc-200">{f.title}</p>
+                  <p className="text-xs text-zinc-500 leading-relaxed mt-0.5">{f.desc}</p>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+
+        {/* CTA */}
+        <div className="mt-5 flex flex-wrap items-center gap-3">
+          <button
+            onClick={onDismiss}
+            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+          >
+            Ir al Dashboard <ChevronRight className="w-4 h-4" />
+          </button>
+          <p className="text-xs text-zinc-600">
+            Este panel muestra el estado en tiempo real de todos tus trabajadores
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function AdminDashboard() {
   const supabase = createClient()
 
+  const [showOverview, setShowOverview] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('fichaapp-overview-dismissed') !== 'true'
+    }
+    return true
+  })
   const [summary, setSummary]         = useState<DailySummary | null>(null)
   const [workers, setWorkers]         = useState<WorkerStatus[]>([])
   const [loading, setLoading]         = useState(true)
@@ -169,6 +286,14 @@ export default function AdminDashboard() {
 
   return (
     <div className="space-y-6 animate-fade-in">
+
+      {/* ── App Overview ── */}
+      {showOverview && (
+        <AppOverview onDismiss={() => {
+          setShowOverview(false)
+          localStorage.setItem('fichaapp-overview-dismissed', 'true')
+        }} />
+      )}
 
       {/* ── Header ── */}
       <div className="flex items-start justify-between">
