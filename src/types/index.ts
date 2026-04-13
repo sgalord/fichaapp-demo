@@ -77,6 +77,7 @@ export interface CheckIn {
   id: string
   worker_id: string
   work_location_id: string | null
+  obra_id: string | null
   type: CheckInType
   latitude: number | null
   longitude: number | null
@@ -93,6 +94,7 @@ export interface CheckIn {
   // Joins
   worker?: Pick<Profile, 'id' | 'full_name'>
   work_location?: Pick<WorkLocation, 'id' | 'name' | 'address'>
+  obra?: Pick<Obra, 'id' | 'name'>
 }
 
 // ── Ausencias / Vacaciones ──────────────────────────────────────────────────

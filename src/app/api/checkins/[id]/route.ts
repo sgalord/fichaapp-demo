@@ -4,9 +4,10 @@ import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { logAudit } from '@/lib/audit'
 
 const EditCheckinSchema = z.object({
-  timestamp: z.string().datetime({ offset: true }).optional(),
-  notes:     z.string().max(500).optional().nullable(),
-  type:      z.enum(['in', 'out']).optional(),
+  timestamp:     z.string().datetime({ offset: true }).optional(),
+  notes:         z.string().max(500).optional().nullable(),
+  type:          z.enum(['in', 'out']).optional(),
+  within_radius: z.boolean().optional(),
 })
 
 async function requireAdmin(supabase: Awaited<ReturnType<typeof createClient>>) {
@@ -36,16 +37,17 @@ export async function PUT(
     return NextResponse.json({ error: message }, { status: 400 })
   }
 
-  const { timestamp, notes, type } = parsed.data
+  const { timestamp, notes, type, within_radius } = parsed.data
 
   const updates: Record<string, unknown> = {
     manually_modified: true,
     modified_by:  user.id,
     modified_at:  new Date().toISOString(),
   }
-  if (timestamp) updates.timestamp = new Date(timestamp).toISOString()
+  if (timestamp !== undefined) updates.timestamp = new Date(timestamp).toISOString()
   if (notes !== undefined) updates.notes = notes || null
-  if (type)  updates.type = type
+  if (type !== undefined) updates.type = type
+  if (within_radius !== undefined) updates.within_radius = within_radius
 
   const adminClient = await createAdminClient()
   const { error } = await adminClient.from('check_ins').update(updates).eq('id', id)

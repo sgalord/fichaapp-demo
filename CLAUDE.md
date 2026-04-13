@@ -44,6 +44,7 @@ Usar Desktop Commander `start_process` con `cmd.exe`, luego `interact_with_proce
 /forgot-password    → recuperar contraseña
 /reset-password     → nueva contraseña (PKCE flow)
 /auth/callback      → callback de Supabase auth
+/privacidad         → Política de privacidad (RGPD, GPS, foto)
 ```
 
 ## API Routes
@@ -55,7 +56,7 @@ GET  /api/workers/[id]           → devuelve email del trabajador
 PUT  /api/workers/[id]           → actualiza perfil + auth + grupos + username
 DELETE /api/workers/[id]         → solo superadmin
 POST /api/checkin                → registrar fichaje (lat/lng/foto/fingerprint/obra_id)
-GET/PUT/DELETE /api/checkins/[id]
+GET/PUT/DELETE /api/checkins/[id]  (PUT acepta within_radius para corregir errores GPS)
 GET  /api/obras                  → lista obras
 POST /api/obras                  → crear obra
 PUT/DELETE /api/obras/[id]
@@ -70,7 +71,8 @@ GET/PUT/DELETE /api/absences/[id] → ver/aprobar-rechazar/eliminar ausencia
 GET  /api/absence-allowances?year → saldo vacaciones+asuntos propios por trabajador (calculado)
 PUT  /api/absence-allowances     → upsert días asignados a un trabajador para un año
 GET  /api/my-balance?year        → saldo del trabajador autenticado (vacaciones, asuntos propios, bajas)
-GET  /api/geocode?address=...    → geocodificación de dirección
+POST /api/checkins               → admin crea fichaje manual para cualquier empleado
+GET  /api/geocode?address=...   → geocodificación de dirección
 GET/POST /api/locations          → ubicaciones legacy (sistema antiguo)
 GET/PUT/DELETE /api/locations/[id]
 GET/POST /api/groups
@@ -202,7 +204,7 @@ david, cesar, tacuru, andres, alex, samuel, candido.gonzalez, yohan.fonseca, ign
 ## Obras del Excel
 AGUILERA, ESTETICA, PARDILLO, COLLADO, PALANCA, SILICEO, SANTA ENGRACIA, CHULENGO
 
-## Estado de la BD (verificado 2026-04-12)
+## Estado de la BD (verificado 2026-04-13)
 Todas las tablas y funciones necesarias están desplegadas en producción:
 - `profiles`, `obras`, `obra_assignments`, `check_ins`, `work_locations`, `location_assignments`
 - `groups`, `user_groups`
@@ -213,11 +215,23 @@ Todas las tablas y funciones necesarias están desplegadas en producción:
 - Función `is_admin()` — SECURITY DEFINER, STABLE (usada en RLS de check_ins y profiles)
 - Storage buckets: `checkin-photos`, `avatars`, `absence-documents`
 
+## Nuevos módulos (2026-04-13)
+- **Sentry**: `@sentry/nextjs` instalado. Config en `sentry.client.config.ts`, `sentry.server.config.ts`, `sentry.edge.config.ts`, `instrumentation.ts`. Activar añadiendo `NEXT_PUBLIC_SENTRY_DSN` a Vercel.
+- **Importación dinámica**: `POST /api/admin/import-workers` acepta `{ workers, obras, email_domain }` — reemplaza los datos hardcodeados. UI en `/admin/import` con upload Excel, preview editable y exportación de credenciales.
+- **Fichaje manual admin**: `POST /api/checkins` — admin crea fichajes para cualquier empleado con obra, timestamp, estado GPS manual.
+- **`within_radius` editable**: `PUT /api/checkins/[id]` ahora acepta `within_radius` (bool) para corregir errores GPS desde el panel admin.
+- **Módulo ausencias → Gestión de personal**: renombrado en nav, títulos y worker page (rutas `/admin/ausencias` y `/worker/ausencias` sin cambio para evitar breaking changes).
+- **RGPD**: página `/privacidad` con política completa de GPS, foto y datos laborales.
+
 ## SQL ejecutado en Supabase (histórico)
 ```sql
 -- check_ins (columnas añadidas)
 ALTER TABLE check_ins ADD COLUMN IF NOT EXISTS photo_url TEXT;
 ALTER TABLE check_ins ADD COLUMN IF NOT EXISTS device_fingerprint TEXT;
+
+-- check_ins obra_id (migración 2026-04-13)
+ALTER TABLE public.check_ins ADD COLUMN IF NOT EXISTS obra_id UUID REFERENCES public.obras(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS check_ins_obra_id_idx ON public.check_ins(obra_id);
 
 -- profiles (columnas añadidas)
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS avatar_url TEXT;
@@ -243,6 +257,11 @@ CREATE TABLE IF NOT EXISTS public.messages (
 );
 -- RLS aplicada: workers_own_messages + admins_all_messages
 ```
+
+## Patrones adicionales (2026-04-13)
+- **Fichajes page**: vista por rango de fechas (2 días por defecto), botones prev/next día, modal nuevo fichaje admin, modal edición con toggle `within_radius`.
+- **GPS errors**: `worker/page.tsx` diferencia `PERMISSION_DENIED`, `POSITION_UNAVAILABLE` y `TIMEOUT` con mensajes específicos.
+- **`obra_id` en `check_ins`**: columna añadida via migración. `POST /api/checkin` la persiste. Queries de checkins y reports hacen join a `obras(id, name)` para mostrar nombre en UI y Excel.
 
 ## Pendiente SQL (deuda técnica menor)
 ```sql

@@ -67,6 +67,7 @@ export async function POST(req: NextRequest) {
     .insert({
       worker_id:          user.id,
       work_location_id:   work_location_id ?? null,
+      obra_id:            obra_id ?? null,
       type,
       latitude:           latitude ?? null,
       longitude:          longitude ?? null,
@@ -76,7 +77,7 @@ export async function POST(req: NextRequest) {
       device_fingerprint: device_fingerprint ?? null,
       timestamp:          new Date().toISOString(),
     })
-    .select('id, type, timestamp, distance_meters, within_radius, photo_url, device_fingerprint')
+    .select('id, type, timestamp, distance_meters, within_radius, photo_url, device_fingerprint, obra_id')
     .single()
 
   if (error) {

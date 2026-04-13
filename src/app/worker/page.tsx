@@ -114,11 +114,29 @@ export default function WorkerPage() {
 
   function getPosition(): Promise<GeolocationPosition> {
     return new Promise((resolve, reject) => {
-      if (!navigator.geolocation) { reject(new Error('GPS no disponible')); return }
+      if (!navigator.geolocation) {
+        reject(new Error('Tu navegador no soporta geolocalización. Usa Chrome o Safari.'))
+        return
+      }
       navigator.geolocation.getCurrentPosition(resolve, reject, {
         enableHighAccuracy: true, timeout: 15000, maximumAge: 0,
       })
     })
+  }
+
+  function gpsErrorMessage(err: unknown): string {
+    if (err instanceof GeolocationPositionError) {
+      switch (err.code) {
+        case GeolocationPositionError.PERMISSION_DENIED:
+          return 'Has bloqueado el acceso a tu ubicación. Ve a los ajustes del navegador y permite el GPS para esta página.'
+        case GeolocationPositionError.POSITION_UNAVAILABLE:
+          return 'No se puede determinar tu ubicación ahora mismo. Sal al exterior o activa el GPS del móvil.'
+        case GeolocationPositionError.TIMEOUT:
+          return 'La obtención del GPS tardó demasiado. Sal al exterior e inténtalo de nuevo.'
+      }
+    }
+    if (err instanceof Error) return err.message
+    return 'No se pudo obtener tu ubicación. Activa el GPS e inténtalo de nuevo.'
   }
 
   async function locateMe() {
@@ -132,9 +150,9 @@ export default function WorkerPage() {
         setDistance(haversineDistance(coords.lat, coords.lng, todayObra.latitude, todayObra.longitude))
       }
       setGeoStatus('ok')
-    } catch {
+    } catch (err) {
       setGeoStatus('error')
-      setMessage({ text: 'No se pudo obtener tu ubicación. Activa el GPS.', type: 'err' })
+      setMessage({ text: gpsErrorMessage(err), type: 'err' })
     }
   }
 
@@ -585,7 +603,7 @@ export default function WorkerPage() {
         <Link href="/worker/ausencias" className="card-hover flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <CalendarOff size={16} className="text-amber-500/70" />
-            <span className="text-sm font-medium text-zinc-400">Ausencias y vacaciones</span>
+            <span className="text-sm font-medium text-zinc-400">Gestión de personal</span>
           </div>
           <ChevronRight size={16} className="text-zinc-600" />
         </Link>

@@ -237,7 +237,7 @@ export default function WorkerAusenciasPage() {
             <div className="w-6 h-6 bg-amber-500/20 rounded-md flex items-center justify-center">
               <CalendarOff size={13} className="text-amber-400" strokeWidth={2} />
             </div>
-            <h1 className="text-base font-bold text-white">Mis Ausencias</h1>
+            <h1 className="text-base font-bold text-white">Gestión de personal</h1>
           </div>
           <button
             onClick={() => openForm()}

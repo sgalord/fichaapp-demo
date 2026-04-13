@@ -59,7 +59,7 @@ export default function AusenciasAdminPage() {
       <div>
         <h1 className="text-xl font-bold text-white flex items-center gap-2">
           <CalendarOff size={20} className="text-amber-400" />
-          Ausencias y Vacaciones
+          Gestión de Personal
         </h1>
         <p className="text-zinc-500 text-sm mt-0.5">
           Gestión de solicitudes y saldos de vacaciones

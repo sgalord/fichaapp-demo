@@ -16,7 +16,7 @@ const NAV = [
   { href: '/admin/obras',        label: 'Obras',        icon: HardHat },
   { href: '/admin/asignaciones', label: 'Asignaciones', icon: CalendarDays },
   { href: '/admin/checkins',     label: 'Fichajes',     icon: ClipboardList },
-  { href: '/admin/ausencias',    label: 'Ausencias',    icon: CalendarOff },
+  { href: '/admin/ausencias',    label: 'Gestión personal', icon: CalendarOff },
   { href: '/admin/groups',       label: 'Grupos',       icon: Users2 },
   { href: '/admin/reports',      label: 'Informes',     icon: BarChart3 },
   { href: '/admin/mensajes',     label: 'Mensajes',     icon: MessageSquare },

@@ -155,7 +155,8 @@ export default function ReportsPage() {
       .from('check_ins')
       .select(`type, timestamp, within_radius, distance_meters, notes, manually_modified,
         worker:profiles!worker_id(full_name),
-        work_location:work_locations(name)`)
+        work_location:work_locations(name),
+        obra:obras(name)`)
       .gte('timestamp', `${dateFrom}T00:00:00`)
       .lte('timestamp', `${dateTo}T23:59:59`)
       .order('timestamp', { ascending: true })
@@ -163,11 +164,12 @@ export default function ReportsPage() {
     const detailData = ((detail ?? []) as unknown as (CheckIn & {
       worker: { full_name: string }
       work_location: { name: string } | null
+      obra: { name: string } | null
     })[]).map(ci => ({
       'Trabajador':   ci.worker?.full_name ?? '',
       'Tipo':         ci.type === 'in' ? 'Entrada' : 'Salida',
       'Fecha y Hora': new Date(ci.timestamp).toLocaleString('es-ES'),
-      'Obra':         ci.work_location?.name ?? 'Sin obra',
+      'Obra':         ci.obra?.name ?? ci.work_location?.name ?? 'Sin obra',
       'Distancia':    ci.distance_meters != null ? distanceLabel(ci.distance_meters) : '-',
       'Dentro radio': ci.within_radius ? 'Sí' : 'No',
       'Modificado':   ci.manually_modified ? 'Sí' : 'No',
