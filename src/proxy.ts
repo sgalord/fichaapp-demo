@@ -27,23 +27,25 @@ export async function proxy(request: NextRequest) {
     }
   )
 
-  // Refresh de la sesión (obligatorio para @supabase/ssr)
-  const { data: { user } } = await supabase.auth.getUser()
-
   const { pathname } = request.nextUrl
 
-  // Rutas públicas — siempre accesibles
+  // Rutas publicas — siempre accesibles (incluyendo landing /)
   if (
+    pathname === '/' ||
     pathname.startsWith('/login') ||
     pathname.startsWith('/api/') ||
     pathname.startsWith('/forgot-password') ||
     pathname.startsWith('/reset-password') ||
-    pathname.startsWith('/auth/')
+    pathname.startsWith('/auth/') ||
+    pathname.startsWith('/privacidad')
   ) {
     return supabaseResponse
   }
 
-  // Sin sesión → login
+  // Refresh de la sesion (obligatorio para @supabase/ssr)
+  const { data: { user } } = await supabase.auth.getUser()
+
+  // Sin sesion → login
   if (!user) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
@@ -64,12 +66,6 @@ export async function proxy(request: NextRequest) {
   }
 
   const role = profile?.role ?? 'worker'
-
-  // Redirigir raíz según rol
-  if (pathname === '/') {
-    const dest = role === 'worker' ? '/worker' : '/admin'
-    return NextResponse.redirect(new URL(dest, request.url))
-  }
 
   // Trabajadores no pueden acceder a /admin
   if (pathname.startsWith('/admin') && role === 'worker') {

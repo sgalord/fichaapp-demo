@@ -2,8 +2,8 @@ import type { Metadata, Viewport } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'BUILT – Control de presencia',
-  description: 'Sistema de fichaje por geolocalización para empresas de construcción',
+  title: 'FichaApp – Control de presencia inteligente',
+  description: 'Fichaje por GPS y foto, gestión de ausencias, informes y mensajería. Para empresas de cualquier sector con personal en campo.',
   manifest: '/manifest.json',
   icons: {
     icon: '/icon.png',
@@ -12,7 +12,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
-    title: 'BUILT',
+    title: 'FichaApp',
   },
 }
 
