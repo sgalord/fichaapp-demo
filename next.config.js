@@ -4,11 +4,15 @@ const { withSentryConfig } = require('@sentry/nextjs')
 
 const nextConfig = {
   reactStrictMode: true,
+  devIndicators: false,
   images: {
     remotePatterns: [],
   },
   turbopack: {
     root: path.resolve(__dirname),
+  },
+  env: {
+    NEXT_PUBLIC_VERCEL_TOOLBAR_ENABLED: '0',
   },
 }
 
