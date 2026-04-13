@@ -157,7 +157,7 @@ export default function ImportPage() {
     ws['!cols'] = Object.keys(data[0] ?? {}).map(k => ({ wch: Math.max(k.length, 18) }))
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Resultados')
-    XLSX.writeFile(wb, `BUILT-importacion-${new Date().toISOString().slice(0, 10)}.xlsx`)
+    XLSX.writeFile(wb, `FichaApp-importacion-${new Date().toISOString().slice(0, 10)}.xlsx`)
   }
 
   // ── Descargar plantilla ──────────────────────────────────────────────────
@@ -177,7 +177,7 @@ export default function ImportPage() {
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, wsWorkers, 'Trabajadores')
     XLSX.utils.book_append_sheet(wb, wsObras, 'Obras')
-    XLSX.writeFile(wb, 'BUILT-plantilla-importacion.xlsx')
+    XLSX.writeFile(wb, 'FichaApp-plantilla-importacion.xlsx')
   }
 
   const created = results.filter(r => r.status === 'created').length

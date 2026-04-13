@@ -99,9 +99,8 @@ function LoginForm() {
       <div className="relative w-full max-w-sm">
         {/* Logo */}
         <div className="text-center mb-10">
-          <div className="inline-flex items-center justify-center mb-5">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo.png" alt="BUILT" className="h-14 w-auto" />
+          <div className="inline-flex items-center justify-center mb-5 border-2 border-dashed border-zinc-700 rounded-xl px-6 py-4 bg-zinc-900/50">
+            <span className="text-zinc-500 text-sm italic">Aquí va tu logo personalizado de tu empresa</span>
           </div>
           <p className="text-zinc-500 text-sm mt-1">Control de presencia</p>
         </div>

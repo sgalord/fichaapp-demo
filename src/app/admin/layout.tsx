@@ -105,8 +105,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       <aside className="hidden lg:flex flex-col fixed inset-y-0 left-0 w-64 bg-zinc-900 border-r border-zinc-800 z-30">
         {/* Logo */}
         <div className="flex items-center gap-3 px-6 py-5 border-b border-zinc-800">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo.png" alt="BUILT" className="h-8 w-auto" />
+          <div className="inline-flex items-center border-2 border-dashed border-zinc-700 rounded-lg px-3 py-1.5 bg-zinc-900/50">
+            <span className="text-zinc-500 text-[11px] italic">Tu logo aquí</span>
+          </div>
           <span className="ml-auto text-[10px] font-medium text-zinc-600 bg-zinc-800 px-2 py-0.5 rounded">Admin</span>
         </div>
 
@@ -129,8 +130,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       <header className="lg:hidden sticky top-0 z-20 bg-zinc-900/95 backdrop-blur-md border-b border-zinc-800 safe-top">
         <div className="flex items-center justify-between px-4 h-14">
           <div className="flex items-center gap-2.5">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo.png" alt="BUILT" className="h-7 w-auto" />
+            <div className="inline-flex items-center border-2 border-dashed border-zinc-700 rounded-lg px-3 py-1 bg-zinc-900/50">
+              <span className="text-zinc-500 text-[11px] italic">Tu logo aquí</span>
+            </div>
           </div>
           <button
             onClick={() => setDrawerOpen(true)}
@@ -151,8 +153,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <aside className="absolute left-0 top-0 bottom-0 w-72 bg-zinc-900 border-r border-zinc-800 flex flex-col animate-slide-up">
             <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800">
               <div className="flex items-center gap-2.5">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src="/logo.png" alt="BUILT" className="h-7 w-auto" />
+                <div className="inline-flex items-center border-2 border-dashed border-zinc-700 rounded-lg px-3 py-1 bg-zinc-900/50">
+                  <span className="text-zinc-500 text-[11px] italic">Tu logo aquí</span>
+                </div>
               </div>
               <button onClick={() => setDrawerOpen(false)} className="p-1.5 text-zinc-400 hover:text-white">
                 <X size={20} />

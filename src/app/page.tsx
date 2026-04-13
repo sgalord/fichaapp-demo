@@ -2,7 +2,8 @@ import Link from 'next/link'
 import {
   MapPin, Clock, Camera, Shield, BarChart3, Users, FileText,
   MessageSquare, Calendar, CheckCircle2, ArrowRight, Building2,
-  Sparkles, Globe, Layers, ChevronRight, Star, Zap, Lock
+  Sparkles, Globe, Layers, ChevronRight, Star, Zap, Lock,
+  Fingerprint, AlertTriangle, Smartphone
 } from 'lucide-react'
 
 // ─── Data ───────────────────────────────────────────────────────────────────
@@ -60,7 +61,7 @@ const MODULES = [
   {
     icon: Shield,
     title: 'Anti-fraude de dispositivo',
-    desc: 'Fingerprint de hardware por fichaje. Detecta si varios empleados fichan desde el mismo dispositivo.',
+    desc: 'Huella digital de hardware única por cada fichaje. Si dos empleados fichan desde el mismo móvil, el sistema lo detecta automáticamente y alerta al administrador. Imposible que un compañero fiche por otro.',
     color: 'text-red-400',
     bg: 'bg-red-400/10',
   },
@@ -121,8 +122,8 @@ function NavBar() {
     <nav className="fixed top-0 inset-x-0 z-50 border-b border-zinc-800/60 bg-zinc-950/80 backdrop-blur-md">
       <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-blue-500 flex items-center justify-center">
-            <Clock className="w-4 h-4 text-white" />
+          <div className="w-8 h-8 rounded-lg border-2 border-dashed border-zinc-600 flex items-center justify-center bg-zinc-900/50">
+            <span className="text-zinc-500 text-[8px]">Logo</span>
           </div>
           <span className="font-bold text-white text-lg tracking-tight">FichaApp</span>
         </div>
@@ -157,9 +158,13 @@ function HeroSection() {
         </div>
 
         <h1 className="text-4xl md:text-6xl font-bold text-white leading-tight mb-6">
-          Sabe dónde está tu equipo.{' '}
+          Controla dónde está tu equipo.{' '}
           <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-violet-400">
             En todo momento.
+          </span>
+          <br />
+          <span className="text-2xl md:text-3xl text-zinc-300 font-semibold">
+            Gestiona sus vacaciones y días libres.
           </span>
         </h1>
 
@@ -232,6 +237,67 @@ function ProblemsSection() {
               </div>
             </div>
           ))}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function FraudDetectionSection() {
+  return (
+    <section className="py-20 px-4">
+      <div className="max-w-5xl mx-auto">
+        <div className="p-8 md:p-12 bg-zinc-900 border border-red-500/20 rounded-2xl relative overflow-hidden">
+          <div className="absolute inset-0 pointer-events-none">
+            <div className="absolute top-0 left-0 w-64 h-64 bg-red-600/5 rounded-full blur-3xl" />
+          </div>
+
+          <div className="relative">
+            <div className="inline-flex items-center gap-2 bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-medium px-3 py-1.5 rounded-full mb-6">
+              <Shield className="w-3.5 h-3.5" />
+              Nivel de detalle anti-fraude
+            </div>
+
+            <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
+              Detecta fraudes{' '}
+              <span className="text-red-400">antes de que ocurran.</span>
+            </h2>
+
+            <p className="text-zinc-400 text-lg mb-8 leading-relaxed max-w-2xl">
+              FichaApp genera una huella digital (fingerprint) única de cada dispositivo en cada fichaje,
+              combinando datos de hardware y canvas del navegador. Si dos empleados fichan desde el mismo
+              móvil, el sistema lo detecta al instante.
+            </p>
+
+            <div className="grid sm:grid-cols-3 gap-6 mb-8">
+              <div className="p-5 bg-zinc-950 border border-zinc-800 rounded-xl">
+                <Fingerprint className="w-8 h-8 text-red-400 mb-3" />
+                <h3 className="font-semibold text-white mb-2">Huella de dispositivo</h3>
+                <p className="text-sm text-zinc-400 leading-relaxed">
+                  Hash SHA-256 generado a partir del hardware y canvas del dispositivo. Único e irrepetible por cada móvil.
+                </p>
+              </div>
+              <div className="p-5 bg-zinc-950 border border-zinc-800 rounded-xl">
+                <AlertTriangle className="w-8 h-8 text-amber-400 mb-3" />
+                <h3 className="font-semibold text-white mb-2">Alerta automática</h3>
+                <p className="text-sm text-zinc-400 leading-relaxed">
+                  Si el mismo dispositivo aparece en fichajes de distintos empleados, el administrador recibe un aviso inmediato.
+                </p>
+              </div>
+              <div className="p-5 bg-zinc-950 border border-zinc-800 rounded-xl">
+                <Smartphone className="w-8 h-8 text-blue-400 mb-3" />
+                <h3 className="font-semibold text-white mb-2">GPS + Foto + Fingerprint</h3>
+                <p className="text-sm text-zinc-400 leading-relaxed">
+                  Triple verificación: ubicación GPS, foto en el momento y huella del dispositivo. Imposible suplantar a un compañero.
+                </p>
+              </div>
+            </div>
+
+            <p className="text-zinc-500 text-sm">
+              La empresa tiene visibilidad total:{' '}
+              <span className="text-zinc-300">cada fichaje queda registrado con coordenadas, foto y fingerprint del dispositivo.</span>
+            </p>
+          </div>
         </div>
       </div>
     </section>
@@ -469,8 +535,8 @@ function Footer() {
     <footer className="border-t border-zinc-800 py-8 px-4">
       <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4 text-sm text-zinc-600">
         <div className="flex items-center gap-2">
-          <div className="w-5 h-5 rounded bg-blue-500 flex items-center justify-center">
-            <Clock className="w-3 h-3 text-white" />
+          <div className="w-5 h-5 rounded border border-dashed border-zinc-600 flex items-center justify-center bg-zinc-900/50">
+            <span className="text-zinc-600 text-[6px]">Logo</span>
           </div>
           <span className="text-zinc-500">FichaApp — Control de presencia inteligente</span>
         </div>
@@ -496,6 +562,7 @@ export default function LandingPage() {
       <main>
         <HeroSection />
         <ProblemsSection />
+        <FraudDetectionSection />
         <ModulesSection />
         <SectorsSection />
         <PerspectivesSection />

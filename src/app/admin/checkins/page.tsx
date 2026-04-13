@@ -295,7 +295,7 @@ export default function CheckinsPage() {
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Fichajes')
     ws['!cols'] = Object.keys(exportData[0] ?? {}).map(k => ({ wch: Math.max(k.length, 15) }))
-    XLSX.writeFile(wb, `BUILT-fichajes-${dateFrom}_${dateTo}.xlsx`)
+    XLSX.writeFile(wb, `FichaApp-fichajes-${dateFrom}_${dateTo}.xlsx`)
     setExporting(false)
   }
 

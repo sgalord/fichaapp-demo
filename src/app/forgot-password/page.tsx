@@ -50,10 +50,9 @@ export default function ForgotPasswordPage() {
       <div className="relative w-full max-w-sm">
         {/* Logo */}
         <div className="text-center mb-10">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-white rounded-2xl mb-5 shadow-lg shadow-white/5">
-            <Building2 size={30} className="text-zinc-950" strokeWidth={1.5} />
+          <div className="inline-flex items-center justify-center border-2 border-dashed border-zinc-700 rounded-xl px-6 py-4 bg-zinc-900/50 mb-5">
+            <span className="text-zinc-500 text-sm italic">Aquí va tu logo personalizado de tu empresa</span>
           </div>
-          <h1 className="text-3xl font-bold text-white tracking-tight">BUILT</h1>
           <p className="text-zinc-500 text-sm mt-1">Control de presencia</p>
         </div>
 

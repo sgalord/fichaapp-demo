@@ -1,7 +1,7 @@
 import Link from 'next/link'
 
 export const metadata = {
-  title: 'Política de Privacidad — BUILT',
+  title: 'Política de Privacidad — FichaApp',
 }
 
 export default function PrivacidadPage() {
@@ -11,8 +11,9 @@ export default function PrivacidadPage() {
 
         {/* Header */}
         <div>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo.png" alt="BUILT" className="h-8 w-auto mb-6" />
+          <div className="inline-flex items-center border-2 border-dashed border-zinc-700 rounded-lg px-4 py-2 bg-zinc-900/50 mb-6">
+            <span className="text-zinc-500 text-sm italic">Aquí va tu logo personalizado de tu empresa</span>
+          </div>
           <h1 className="text-3xl font-bold text-white">Política de Privacidad</h1>
           <p className="text-zinc-500 text-sm mt-2">Última actualización: abril de 2026</p>
         </div>

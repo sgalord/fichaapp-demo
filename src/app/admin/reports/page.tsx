@@ -206,7 +206,7 @@ export default function ReportsPage() {
     ws1['!cols'] = Object.keys(summaryData[0] ?? {}).map(k => ({ wch: Math.max(k.length, 14) }))
     ws2['!cols'] = Object.keys(detailData[0] ?? {}).map(k => ({ wch: Math.max(k.length, 14) }))
 
-    XLSX.writeFile(wb, `BUILT-informe-${dateFrom}_${dateTo}.xlsx`)
+    XLSX.writeFile(wb, `FichaApp-informe-${dateFrom}_${dateTo}.xlsx`)
     setExporting(false)
   }
 
