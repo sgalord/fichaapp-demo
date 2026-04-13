@@ -32,6 +32,10 @@ export default function RootLayout({
   return (
     <html lang="es">
       <head>
+        {/* Disable Vercel toolbar before it initializes */}
+        <script dangerouslySetInnerHTML={{ __html:
+          'window.VERCEL_TOOLBAR_ENABLED=false;window.__VERCEL_TOOLBAR_ENABLED__=false;window.__vercel_toolbar_injected__=true;'
+        }} />
         <link rel="apple-touch-icon" href="/icon-192.png" />
       </head>
       <body className="min-h-screen bg-zinc-950">
